@@ -15,7 +15,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 use super::DbHarness;
 
-impl<'a> DbHarness<SqliteHarnessUser<'a>, SqliteHarnessSession, SqliteHarnessToken> {
+impl DbHarness<SqliteHarnessUser, SqliteHarnessSession, SqliteHarnessToken> {
     pub fn new_sqlite(pool: Pool<SqliteConnectionManager>) -> Self {
         return DbHarness {
             user: SqliteHarnessUser::new(pool.clone()),

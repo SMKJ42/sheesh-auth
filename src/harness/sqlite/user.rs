@@ -9,13 +9,13 @@ use crate::{
     user::{PrivateUserMeta, PublicUserMeta, User},
 };
 
-pub struct SqliteHarnessUser<'a> {
+pub struct SqliteHarnessUser {
     connection: Pool<SqliteConnectionManager>,
-    private_cols: Vec<&'a str>,
-    public_cols: Vec<&'a str>,
+    private_cols: Vec<&'static str>,
+    public_cols: Vec<&'static str>,
 }
 
-impl<'a> SqliteHarnessUser<'a> {
+impl SqliteHarnessUser {
     pub fn new(connection: Pool<SqliteConnectionManager>) -> Self {
         Self {
             connection,
@@ -24,18 +24,18 @@ impl<'a> SqliteHarnessUser<'a> {
         }
     }
 
-    pub fn with_public_cols(mut self, cols: Vec<&'a str>) -> Self {
+    pub fn with_public_cols(mut self, cols: Vec<&'static str>) -> Self {
         self.public_cols = cols;
         return self;
     }
 
-    pub fn with_private_cols(mut self, cols: Vec<&'a str>) -> Self {
+    pub fn with_private_cols(mut self, cols: Vec<&'static str>) -> Self {
         self.private_cols = cols;
         return self;
     }
 }
 
-impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
+impl DbHarnessUser for SqliteHarnessUser {
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
         self.connection
             .get()?
