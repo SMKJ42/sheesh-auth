@@ -1,12 +1,12 @@
 mod entity;
 
-mod session;
-mod token;
-mod user;
+pub mod session;
+pub mod token;
+pub mod user;
 
-pub use session::*;
-pub use token::*;
-pub use user::*;
+use session::*;
+use token::*;
+use user::*;
 
 use rusqlite::ToSql;
 
