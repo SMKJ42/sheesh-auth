@@ -4,9 +4,9 @@ mod session;
 mod token;
 mod user;
 
-use session::*;
-use token::*;
-use user::*;
+pub use session::*;
+pub use token::*;
+pub use user::*;
 
 use rusqlite::ToSql;
 
