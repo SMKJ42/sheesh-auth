@@ -71,51 +71,36 @@ where
     T: IdGenerator,
     V: DbHarnessUser,
 {
-    pub fn create_user<Pu, Pr>(
+    pub fn create_user(
         &self,
         username: String,
         pwd: String,
         role: Role,
-        public: Option<Pu>,
-        private: Option<Pr>,
-    ) -> Result<User<Pu, Pr>, UserManagerError>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    ) -> Result<UserMeta, UserManagerError> {
         let id = self.id_generator.new_u64();
 
         let salt = (self.salt_fn)();
         let secret = (self.hash_fn)(&pwd, &salt)?;
 
-        let user = User::new(
-            i64::from_be_bytes(id.to_be_bytes()),
-            username,
-            secret,
-            role,
-            public,
-            private,
-        )?;
+        let user = UserMeta::new(i64::from_be_bytes(id.to_be_bytes()), username, secret, role)?;
 
         self.harness.insert(&user)?;
         return Ok(user);
     }
 
-    pub fn login<Pu, Pr, Id, Sh, Th>(
+    pub fn login<Id, Sh, Th>(
         &self,
         session_manager: &SessionManager<Id, Sh, Th>,
-        user: &User<Pu, Pr>,
+        username: &str,
         pwd: &str,
     ) -> Result<(Session, String, String), UserManagerError>
     where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
         Id: IdGenerator,
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
     {
-        let user_res = self.get_user(&user.id);
-        let user: User<Pu, Pr>;
+        let user_res = self.get_user_by_username(username);
+        let user: UserMeta;
 
         match user_res {
             // harness error occured, propogate the err.
@@ -143,15 +128,13 @@ where
         };
     }
 
-    pub fn logout<Pu, Pr, Id, Sh, Th>(
+    pub fn logout<Id, Sh, Th>(
         &self,
         session_manager: &SessionManager<Id, Sh, Th>,
-        user: &User<Pu, Pr>,
+        user: &UserMeta,
         user_token_atmpt: &str,
     ) -> Result<(), UserManagerError>
     where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
         Id: IdGenerator,
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
@@ -208,31 +191,19 @@ where
         }
     }
 
-    pub fn verify_pwd<Pu, Pr>(&self, user: &User<Pu, Pr>, pwd: &str) -> Result<(), AuthTokenError>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    pub fn verify_pwd(&self, user: &UserMeta, pwd: &str) -> Result<(), AuthTokenError> {
         (self.verify_pass_fn)(pwd, &user.secret)
     }
 
-    pub fn update_user<Pu, Pr>(&self, user: User<Pu, Pr>) -> Result<usize, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    pub fn update_user(&self, user: UserMeta) -> Result<(), Box<dyn error::Error>> {
         return self.harness.update(&user);
     }
 
-    pub fn update_password<Pu, Pr>(
+    pub fn update_password(
         &self,
-        mut user: User<Pu, Pr>,
+        mut user: UserMeta,
         pwd: String,
-    ) -> Result<usize, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    ) -> Result<(), Box<dyn error::Error>> {
         let salt = (self.salt_fn)();
         let secret = (self.hash_fn)(&pwd, &salt)?;
 
@@ -241,29 +212,24 @@ where
         return self.harness.update(&user);
     }
 
-    pub fn get_user<Pu, Pr>(&self, id: &i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
-        return self.harness.read(*id);
+    pub fn get_user_by_id(&self, id: &i64) -> Result<Option<UserMeta>, Box<dyn error::Error>> {
+        return self.harness.read_by_id(*id);
     }
 
-    pub fn delete_user<Pu, Pr>(&self, id: i64) -> Result<(), Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    pub fn get_user_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<UserMeta>, Box<dyn error::Error>> {
+        return self.harness.read_by_username(username);
+    }
+
+    pub fn delete_user(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
         return self.harness.delete(id);
     }
 }
 
 #[derive(Clone)]
-pub struct User<Pu, Pr>
-where
-    Pu: PublicUserMeta,
-    Pr: PrivateUserMeta,
-{
+pub struct UserMeta {
     id: i64,
     session_id: Option<i64>,
     username: String,
@@ -271,22 +237,16 @@ where
     ban: bool,
     groups: Groups,
     role: Role,
-    public: Option<Pu>,
-    private: Option<Pr>,
+    // public: Option<Pu>,
+    // private: Option<Pr>,
 }
 
-impl<Pu, Pr> User<Pu, Pr>
-where
-    Pu: PublicUserMeta,
-    Pr: PrivateUserMeta,
-{
+impl UserMeta {
     pub fn new(
         id: i64,
         username: String,
         secret: String,
         role: Role,
-        public: Option<Pu>,
-        private: Option<Pr>,
     ) -> Result<Self, Box<dyn error::Error>> {
         return Ok(Self {
             id,
@@ -296,8 +256,6 @@ where
             session_id: None,
             groups: Groups::new(),
             role,
-            public,
-            private,
         });
     }
 
@@ -309,8 +267,6 @@ where
         ban: bool,
         groups: Groups,
         role: Role,
-        public: Option<Pu>,
-        private: Option<Pr>,
     ) -> Self {
         return Self {
             id,
@@ -320,8 +276,6 @@ where
             ban,
             groups,
             role,
-            public,
-            private,
         };
     }
 
@@ -373,24 +327,6 @@ where
         return self.session_id;
     }
 
-    pub fn public(&self) -> Option<Pu> {
-        return self.public.clone();
-    }
-
-    pub fn set_public(&mut self, public: Option<Pu>) {
-        self.public = public;
-    }
-
-    pub fn private(&self) -> Option<Pr> {
-        return self.private.clone();
-    }
-
-    pub fn set_private(&mut self, private: Option<Pr>) {
-        self.private = private;
-    }
-}
-
-impl<Pu: PublicUserMeta, Pr: PrivateUserMeta> User<Pu, Pr> {
     pub fn remove_group(&mut self, group: Group) {
         self.groups.remove_group(group);
     }

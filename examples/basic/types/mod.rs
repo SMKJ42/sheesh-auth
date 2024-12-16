@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use sheesh::user::{PrivateUserMeta, PublicUserMeta, Role, User};
+use sheesh::user::{PrivateUserMeta, PublicUserMeta, Role, UserMeta};
 
 // the following trait impls create type safety for you across the application.
 pub enum Roles {
@@ -49,5 +49,3 @@ impl PrivateUserMeta for MyPrivateUserMetadata {
     //     vec![]
     // }
 }
-
-pub type MyUser = User<MyPublicUserMetadata, MyPrivateUserMetadata>;

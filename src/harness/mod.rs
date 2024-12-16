@@ -7,7 +7,7 @@ use std::{error, fmt::Display};
 use crate::{
     auth_token::AuthToken,
     session::Session,
-    user::{PrivateUserMeta, PublicUserMeta, User},
+    user::{PrivateUserMeta, PublicUserMeta, UserMeta},
 };
 
 pub enum Db {
@@ -40,22 +40,12 @@ impl From<Box<dyn error::Error>> for HarnessError {
 }
 
 pub trait DbHarnessUser {
-    fn create_table(&self, sql_string: Option<String>) -> Result<(), Box<dyn error::Error>>;
-    fn read<'a, Pu, Pr>(&self, id: i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta;
-
-    fn update<Pu, Pr>(&self, item: &User<Pu, Pr>) -> Result<usize, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta;
-
-    fn insert<Pu, Pr>(&self, item: &User<Pu, Pr>) -> Result<(), Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta;
-
+    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
+    fn read_by_id(&self, id: i64) -> Result<Option<UserMeta>, Box<dyn error::Error>>;
+    fn read_by_username(&self, username: &str) -> Result<Option<UserMeta>, Box<dyn error::Error>>;
+    fn update(&self, item: &UserMeta) -> Result<(), Box<dyn error::Error>>;
+    fn set_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, item: &UserMeta) -> Result<(), Box<dyn error::Error>>;
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
 
     // fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
@@ -131,7 +121,7 @@ where
     pub fn init_tables(&self) -> Result<(), HarnessError> {
         self.token.create_table()?;
         self.session.create_table()?;
-        self.user.create_table(None)?;
+        self.user.create_table()?;
 
         return Ok(());
     }

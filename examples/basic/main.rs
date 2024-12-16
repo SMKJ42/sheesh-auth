@@ -1,6 +1,10 @@
 mod types;
 
-use sheesh::{harness::DbHarness, session::SessionManagerConfig, user::UserManagerConfig};
+use sheesh::{
+    harness::DbHarness,
+    session::SessionManagerConfig,
+    user::{UserManagerConfig, UserMeta},
+};
 
 extern crate r2d2;
 extern crate r2d2_sqlite;
@@ -35,19 +39,13 @@ fn main() {
     let mut i = 0;
 
     while i < 100 {
-        let user: MyUser = user_manager
-            .create_user(
-                i.to_string(),
-                "pwd".to_string(),
-                Roles::Admin.as_role(),
-                Some(MyPublicUserMetadata),
-                Some(MyPrivateUserMetadata),
-            )
+        let user: UserMeta = user_manager
+            .create_user(i.to_string(), "pwd".to_string(), Roles::Admin.as_role())
             .unwrap();
 
         let pwd_str = "pwd";
 
-        match user_manager.login(&session_manager, &user, pwd_str) {
+        match user_manager.login(&session_manager, &user.username(), pwd_str) {
             Ok((mut session, refresh_secret, _access_secret)) => {
                 // creating a new access token
                 let _access_secret = session_manager

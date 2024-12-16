@@ -6,7 +6,7 @@ use rusqlite::named_params;
 
 use crate::{
     harness::DbHarnessUser,
-    user::{PrivateUserMeta, PublicUserMeta, User},
+    user::{PrivateUserMeta, PublicUserMeta, UserMeta},
 };
 
 pub struct SqliteHarnessUser {
@@ -44,28 +44,11 @@ impl DbHarnessUser for SqliteHarnessUser {
         return Ok(());
     }
 
-    fn insert<Pu, Pr>(&self, user: &User<Pu, Pr>) -> Result<(), Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
-        let my_params: String;
-        let my_named_params: String;
-        if self.public_cols.len() == 0 && self.private_cols.len() == 0 {
-            my_params = String::new();
-            my_named_params = String::new();
-        } else {
-            todo!();
-        }
-
+    fn insert(&self, user: &UserMeta) -> Result<(), Box<dyn error::Error>> {
         //TODO: dynamically utilize the fields in the .public_meta and .private_meta
         self.connection.get()?.execute(
-            format!(
-                "INSERT INTO users (id, session_id, username, secret, ban, groups, role{})
-                    VALUES (:id, :session_id, :username, :secret, :ban, :groups, :role{})",
-                my_params, my_named_params
-            )
-            .as_str(),
+            "INSERT INTO users (id, session_id, username, secret, ban, groups, role)
+                    VALUES (:id, :session_id, :username, :secret, :ban, :groups, :role)",
             named_params! {
                 ":id": user.id(),
                 ":session_id": user.session_id(),
@@ -79,11 +62,7 @@ impl DbHarnessUser for SqliteHarnessUser {
 
         return Ok(());
     }
-    fn read<Pu, Pr>(&self, id: i64) -> Result<Option<User<Pu, Pr>>, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+    fn read_by_id(&self, id: i64) -> Result<Option<UserMeta>, Box<dyn error::Error>> {
         let conn = self.connection.get()?;
         let res = conn.query_row("SELECT * FROM users WHERE id = ?", [id], |row| {
             let id = row.get(0)?;
@@ -94,8 +73,8 @@ impl DbHarnessUser for SqliteHarnessUser {
             let groups = row.get(5)?;
             let role = row.get(6)?;
 
-            return Ok(User::from_values(
-                id, session_id, username, secret, ban, groups, role, None, None,
+            return Ok(UserMeta::from_values(
+                id, session_id, username, secret, ban, groups, role,
             ));
         });
 
@@ -104,11 +83,34 @@ impl DbHarnessUser for SqliteHarnessUser {
             Err(err) => Err(err.into()),
         }
     }
-    fn update<Pu, Pr>(&self, user: &User<Pu, Pr>) -> Result<usize, Box<dyn error::Error>>
-    where
-        Pu: PublicUserMeta,
-        Pr: PrivateUserMeta,
-    {
+
+    fn read_by_username(&self, username: &str) -> Result<Option<UserMeta>, Box<dyn error::Error>> {
+        let conn = self.connection.get()?;
+        let res = conn.query_row(
+            "SELECT * FROM users WHERE username = ?",
+            [username],
+            |row| {
+                let id = row.get(0)?;
+                let session_id = row.get(1)?;
+                let username = row.get(2)?;
+                let secret = row.get(3)?;
+                let ban = row.get(4)?;
+                let groups = row.get(5)?;
+                let role = row.get(6)?;
+
+                return Ok(UserMeta::from_values(
+                    id, session_id, username, secret, ban, groups, role,
+                ));
+            },
+        );
+
+        match res {
+            Ok(user) => Ok(Some(user)),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn update(&self, user: &UserMeta) -> Result<(), Box<dyn error::Error>> {
         let conn = self.connection.get()?;
         let res = conn.execute(
             "UPDATE users SET 
@@ -119,77 +121,60 @@ impl DbHarnessUser for SqliteHarnessUser {
         role = :role
         WHERE id = :id",
             named_params! {
-                ":id": user.id(),
                 ":session_id": user.session_id(),
                 ":username": user.username(),
                 ":ban": user.is_banned(),
                 ":groups": user.groups(),
-                ":role": user.role()
+                ":role": user.role(),
+                ":id": user.id(),
             },
         );
 
         match res {
-            Ok(res) => Ok(res),
+            Ok(res) => {
+                // ensure that we did not update more than one user.
+                debug_assert!(res <= 1);
+                return Ok(());
+            }
             Err(err) => Err(err.into()),
         }
     }
 
-    fn create_table(
-        &self,
-        sql_string: Option<String>,
-    ) -> result::Result<(), Box<dyn error::Error>> {
-        let default_stmt = format!(
-            "CREATE TABLE IF NOT EXISTS users (
+    fn create_table(&self) -> result::Result<(), Box<dyn error::Error>> {
+        let default_stmt = "CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
-                session_id INTEGER,
                 username STRING NOT NULL UNIQUE,
                 secret STRING NOT NULL,
                 ban TINYINT NOT NULL,
                 groups STRING NOT NULL,
                 role STRING NOT NULL,
+                session_id INTEGER,
                 FOREIGN KEY(session_id) REFERENCES sessions(id)
-            "
-        );
+            );";
 
-        match sql_string {
-            Some(stmt_extension) => {
-                self.connection
-                    .get()?
-                    .prepare(format!("{},{});", default_stmt, stmt_extension).as_str())?
-                    .execute([])?;
-            }
-            None => {
-                self.connection
-                    .get()?
-                    .prepare(format!("{});", default_stmt).as_str())?
-                    .execute([])?;
-            }
-        };
+        self.connection.get()?.prepare(default_stmt)?.execute([])?;
 
         return Ok(());
     }
+    fn set_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>> {
+        let conn = self.connection.get()?;
+        let res = conn.execute(
+            "UPDATE users SET 
+        ban = :ban,
+        WHERE id = :id",
+            named_params! {
+                ":ban": bool,
+                ":id": id,
+            },
+        );
 
-    // fn ban(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
-
-    // fn insert_group(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
-
-    // fn remove_group(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
-
-    // fn update_private(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
-
-    // fn update_public(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
-
-    // fn write_role(&self) -> result::Result<(), Box<dyn error::Error>> {
-    //     todo!()
-    // }
+        match res {
+            Ok(res) => {
+                // ensure that we did not update more than one user.
+                debug_assert!(res <= 1);
+                return Ok(());
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
 }
