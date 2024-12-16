@@ -61,6 +61,21 @@ where
     ttl: i64,
 }
 
+pub struct RefreshSecret(String);
+
+impl RefreshSecret {
+    pub fn as_str(&self) -> &str {
+        return &self.0;
+    }
+}
+pub struct AccessSecret(String);
+
+impl AccessSecret {
+    pub fn as_str(&self) -> &str {
+        return &self.0;
+    }
+}
+
 impl<T, V, X> SessionManager<T, V, X>
 where
     T: IdGenerator,
@@ -70,7 +85,7 @@ where
     pub fn new_session(
         &self,
         user_id: i64,
-    ) -> Result<(Session, String, String), Box<dyn error::Error>> {
+    ) -> Result<(Session, RefreshSecret, AccessSecret), Box<dyn error::Error>> {
         let id = self.id_generator.new_u64();
 
         let (refresh_token, refresh_secret) = self
@@ -89,7 +104,11 @@ where
         };
         self.harness.insert(&session)?;
 
-        return Ok((session, refresh_secret, access_secret));
+        return Ok((
+            session,
+            RefreshSecret(refresh_secret),
+            AccessSecret(access_secret),
+        ));
     }
 
     pub fn verify_session_token(
@@ -99,7 +118,7 @@ where
         user_token_atmpt: &str,
     ) -> Result<(), TokenManagerError> {
         self.token_manager
-            .trusted_verify_refresh_token(token_id, user_id, user_token_atmpt)
+            .untrusted_verify_refresh_token(token_id, user_id, user_token_atmpt)
     }
 
     pub fn verify_access_token(
@@ -109,17 +128,17 @@ where
         user_token_atmpt: &str,
     ) -> Result<(), TokenManagerError> {
         self.token_manager
-            .trusted_verify_access_token(token_id, user_id, user_token_atmpt)
+            .untrusted_verify_access_token(token_id, user_id, user_token_atmpt)
     }
 
-    pub fn verify_token(
+    pub fn trusted_verify_token(
         &self,
         token: AuthToken,
         user_id: i64,
         user_token_atmpt: &str,
     ) -> Result<(), AuthTokenError> {
         self.token_manager
-            .verify_token(token, user_id, user_token_atmpt)
+            .trusted_verify_token(token, user_id, user_token_atmpt)
     }
 
     pub fn get_session(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
@@ -130,7 +149,7 @@ where
         &self,
         session: &mut Session,
         user_id: i64,
-    ) -> Result<String, Box<dyn error::Error>> {
+    ) -> Result<AccessSecret, Box<dyn error::Error>> {
         // cleanup old token
         match session.access_token {
             Some(token_id) => {
@@ -149,17 +168,17 @@ where
         //update the session with the new token id.
         self.harness.update(session)?;
 
-        return Ok(access_token_secret);
+        return Ok(AccessSecret(access_token_secret));
     }
 
     /// while session does have a user_id field, we do not want to verify the user id from this struct,
     /// instead the user id should be supplied from the user request.
     pub fn create_new_refresh_token(
         &self,
-        mut session: Session,
+        session: &mut Session,
         user_id: i64,
-        user_token_atmpt: &str,
-    ) -> Result<(String, String), TokenManagerError> {
+        user_token_atmpt: &RefreshSecret,
+    ) -> Result<(RefreshSecret, AccessSecret), TokenManagerError> {
         let refresh_token: Option<AuthToken>;
 
         // retrieve the persisted token from db
@@ -185,10 +204,11 @@ where
         match &refresh_token {
             // if we obtained a token, validate it.
             Some(token) => {
-                match self
-                    .token_manager
-                    .verify_token(token.clone(), user_id, user_token_atmpt)
-                {
+                match self.token_manager.trusted_verify_token(
+                    token.clone(),
+                    user_id,
+                    user_token_atmpt.as_str(),
+                ) {
                     Ok(_) => {
                         // The provided token is valid, we can continue...
                     }
@@ -234,12 +254,17 @@ where
         session.access_token = Some(access_token.id());
 
         match self.harness.update(&session) {
-            Ok(()) => return Ok((refresh_token_secret, access_token_secret)),
+            Ok(()) => {
+                return Ok((
+                    RefreshSecret(refresh_token_secret),
+                    AccessSecret(access_token_secret),
+                ))
+            }
             Err(err) => return Err(TokenManagerError::Harness(err)),
         }
     }
 
-    pub fn set_token_ids_none(&self, mut session: Session) -> Result<(), TokenManagerError> {
+    pub fn set_token_ids_none(&self, session: &mut Session) -> Result<(), TokenManagerError> {
         session.access_token = None;
         session.refresh_token = None;
 
@@ -270,7 +295,7 @@ where
         }
     }
 
-    pub fn invalidate_access_token(&self, mut session: Session) -> Result<(), TokenManagerError> {
+    pub fn invalidate_access_token(&self, session: &mut Session) -> Result<(), TokenManagerError> {
         match session.access_token {
             Some(token_id) => match self.token_manager.delete_access_token(token_id) {
                 Ok(()) => {

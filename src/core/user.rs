@@ -6,7 +6,7 @@ use super::{
     auth_token::{AuthTokenError, TokenManagerError},
     default_hash_fn, default_rng_salt_fn, default_verify_token_fn,
     id::{DefaultIdGenerator, IdGenerator},
-    session::{Session, SessionManager},
+    session::{AccessSecret, RefreshSecret, Session, SessionManager},
 };
 
 pub struct UserManagerConfig<T>
@@ -93,7 +93,7 @@ where
         session_manager: &SessionManager<Id, Sh, Th>,
         username: &str,
         pwd: &str,
-    ) -> Result<(Session, String, String), UserManagerError>
+    ) -> Result<(Session, RefreshSecret, AccessSecret), UserManagerError>
     where
         Id: IdGenerator,
         Sh: DbHarnessSession,

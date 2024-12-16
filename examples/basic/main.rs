@@ -54,11 +54,13 @@ fn main() {
 
                 // creating a new sesson token
                 let (_refresh_secret, _access_secret) = session_manager
-                    .create_new_refresh_token(session, user.id(), &refresh_secret)
+                    .create_new_refresh_token(&mut session, user.id(), &refresh_secret)
                     .unwrap();
 
                 // invalidating an access token is perfromed through the session.
-                session_manager.invalidate_access_token(session).unwrap();
+                session_manager
+                    .invalidate_access_token(&mut session)
+                    .unwrap();
 
                 // creating an access token takes an id and a session
                 // DANGER -- issueing a new access token does not perform a token validation step, that is left up to the developer to handle.
@@ -71,19 +73,19 @@ fn main() {
                 let _is_valid_access_token = session_manager.verify_access_token(
                     session.access_token().unwrap(),
                     user.id(),
-                    &access_secret,
+                    &access_secret.as_str(),
                 );
                 // verify a refresh_token
                 // DANGER -- this is performed through the know session, but the client should be sending the token String to be provided to this function.
                 let _is_valid_refresh_token = session_manager.verify_session_token(
                     session.refresh_token().unwrap(),
                     user.id(),
-                    &refresh_secret,
+                    &refresh_secret.as_str(),
                 );
 
                 // logout a user, this requires the user to know the refresh_secret. this prevents DOS
                 // if you want functionality that logs out the user (for security reasons, not user request) try session_manager.invalidate_session()
-                match user_manager.logout(&session_manager, &user, &refresh_secret) {
+                match user_manager.logout(&session_manager, &user, &refresh_secret.as_str()) {
                     Ok(()) => {}
                     Err(_err) => {}
                 }

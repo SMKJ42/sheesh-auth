@@ -120,7 +120,7 @@ where
         }
     }
 
-    pub fn trusted_verify_refresh_token(
+    pub fn untrusted_verify_refresh_token(
         &self,
         token_id: i64,
         user_id: i64,
@@ -128,7 +128,8 @@ where
     ) -> Result<(), TokenManagerError> {
         match self.harness.read_refresh_token(token_id) {
             Ok(token_opt) => match token_opt {
-                Some(auth_token) => match self.verify_token(auth_token, user_id, token_str) {
+                Some(auth_token) => match self.trusted_verify_token(auth_token, user_id, token_str)
+                {
                     Ok(()) => return Ok(()),
                     Err(err) => return Err(err.into()),
                 },
@@ -138,7 +139,7 @@ where
         }
     }
 
-    pub fn trusted_verify_access_token(
+    pub fn untrusted_verify_access_token(
         &self,
         token_id: i64,
         user_id: i64,
@@ -146,7 +147,8 @@ where
     ) -> Result<(), TokenManagerError> {
         match self.harness.read_access_token(token_id) {
             Ok(token_opt) => match token_opt {
-                Some(auth_token) => match self.verify_token(auth_token, user_id, token_str) {
+                Some(auth_token) => match self.trusted_verify_token(auth_token, user_id, token_str)
+                {
                     Ok(()) => return Ok(()),
                     Err(err) => return Err(err.into()),
                 },
@@ -156,7 +158,7 @@ where
         }
     }
 
-    pub fn verify_token(
+    pub fn trusted_verify_token(
         &self,
         auth_token: AuthToken,
         user_id: i64,
@@ -282,7 +284,7 @@ impl AuthToken {
         };
     }
 
-    pub fn valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         return self.valid;
     }
 

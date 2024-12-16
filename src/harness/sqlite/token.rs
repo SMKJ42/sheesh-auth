@@ -45,7 +45,7 @@ impl DbHarnessToken for SqliteHarnessToken {
                     ":user_id": auth_token.user_id(),
                     ":secret": secret,
                     ":expires": auth_token.expires(),
-                    ":valid": auth_token.valid(),
+                    ":valid": auth_token.is_valid(),
                 },
             )?,
             TokenType::Access { token } => connection.execute(
@@ -56,7 +56,7 @@ impl DbHarnessToken for SqliteHarnessToken {
                     ":user_id": auth_token.user_id(),
                     ":secret": token,
                     ":expires": auth_token.expires(),
-                    ":valid": auth_token.valid(),
+                    ":valid": auth_token.is_valid(),
                 },
             )?,
         };
@@ -73,7 +73,7 @@ impl DbHarnessToken for SqliteHarnessToken {
                     SET valid = :valid
                     WHERE id = :id",
                 named_params! {
-                    ":valid": auth_token.valid(),
+                    ":valid": auth_token.is_valid(),
                     ":id": auth_token.id(),
                 },
             )?,
@@ -82,7 +82,7 @@ impl DbHarnessToken for SqliteHarnessToken {
                     SET valid = :valid,
                     WHERE id = :id",
                 named_params! {
-                    ":valid": auth_token.valid(),
+                    ":valid": auth_token.is_valid(),
                     ":id": auth_token.id(),
                 },
             )?,
