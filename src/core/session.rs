@@ -318,6 +318,17 @@ pub struct Session {
 }
 
 impl Session {
+    pub fn new(id: i64, user_id: i64, refresh_token: Option<i64>, access_token: Option<i64>) {}
+
+    pub fn stateless() -> Self {
+        return Self {
+            id: 0,
+            user_id: 0,
+            refresh_token: None,
+            access_token: None,
+        };
+    }
+
     pub fn from_values(
         id: i64,
         user_id: i64,

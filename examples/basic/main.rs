@@ -1,7 +1,7 @@
 mod types;
 
 use sheesh::{
-    harness::DbHarness,
+    harness::{sqlite::session, DbHarness},
     session::SessionManagerConfig,
     user::{UserManagerConfig, UserMeta},
 };
@@ -46,8 +46,12 @@ fn main() {
         let pwd_str = "pwd";
 
         match user_manager.login(&session_manager, &user.username(), pwd_str) {
-            Ok((mut session, refresh_secret, _access_secret)) => {
+            Ok((refresh_secret, _access_secret)) => {
                 // creating a new access token
+                let mut session = session_manager
+                    .get_session(user.session_id().unwrap())
+                    .unwrap();
+
                 let _access_secret = session_manager
                     .create_new_access_token(&mut session, user.id())
                     .unwrap();
@@ -70,18 +74,22 @@ fn main() {
 
                 // verify an access token
                 // DANGER -- this is performed through the know session, but the client should be sending the token String to be provided to this function.
-                let _is_valid_access_token = session_manager.verify_access_token(
-                    session.access_token().unwrap(),
-                    user.id(),
-                    &access_secret.as_str(),
-                );
+                session_manager
+                    .verify_access_token(
+                        session.access_token().unwrap(),
+                        user.id(),
+                        &access_secret.as_str(),
+                    )
+                    .unwrap();
                 // verify a refresh_token
                 // DANGER -- this is performed through the know session, but the client should be sending the token String to be provided to this function.
-                let _is_valid_refresh_token = session_manager.verify_session_token(
-                    session.refresh_token().unwrap(),
-                    user.id(),
-                    &refresh_secret.as_str(),
-                );
+                session_manager
+                    .verify_session_token(
+                        session.refresh_token().unwrap(),
+                        user.id(),
+                        &refresh_secret.as_str(),
+                    )
+                    .unwrap();
 
                 // logout a user, this requires the user to know the refresh_secret. this prevents DOS
                 // if you want functionality that logs out the user (for security reasons, not user request) try session_manager.invalidate_session()

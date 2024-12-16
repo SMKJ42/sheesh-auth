@@ -309,7 +309,7 @@ impl AuthToken {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AuthTokenErrorKind {
     Expired,
     Invalid,
@@ -332,7 +332,7 @@ impl Display for AuthTokenErrorKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthTokenError {
     pub kind: AuthTokenErrorKind,
 }

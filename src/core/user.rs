@@ -93,14 +93,14 @@ where
         session_manager: &SessionManager<Id, Sh, Th>,
         username: &str,
         pwd: &str,
-    ) -> Result<(Session, RefreshSecret, AccessSecret), UserManagerError>
+    ) -> Result<(RefreshSecret, AccessSecret), UserManagerError>
     where
         Id: IdGenerator,
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
     {
         let user_res = self.get_user_by_username(username);
-        let user: UserMeta;
+        let mut user: UserMeta;
 
         match user_res {
             // harness error occured, propogate the err.
@@ -121,7 +121,11 @@ where
             Ok(_) => {
                 let sess_res = session_manager.new_session(user.id);
                 match sess_res {
-                    Ok(res) => return Ok(res),
+                    Ok((session, refresh, access)) => {
+                        user.session_id = Some(session.id());
+                        self.update_user(user)?;
+                        return Ok((refresh, access));
+                    }
                     Err(err) => return Err(err.into()),
                 }
             }
@@ -488,6 +492,10 @@ impl From<AuthTokenError> for UserManagerError {
 impl UserManagerError {
     pub fn new(kind: UserManagerErrorKind) -> Self {
         return Self { kind };
+    }
+
+    pub fn kind(&self) -> &UserManagerErrorKind {
+        return &self.kind;
     }
 }
 
