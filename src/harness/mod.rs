@@ -5,11 +5,7 @@ pub mod stateless;
 
 use std::{error, fmt::Display};
 
-use crate::{
-    auth_token::AuthToken,
-    session::Session,
-    user::{PrivateUserMeta, PublicUserMeta, UserMeta},
-};
+use crate::{auth_token::AuthToken, session::Session, user::UserMeta};
 
 pub enum Db {
     MySql,

@@ -7,16 +7,16 @@ use super::{DbHarnessSession, DbHarnessToken};
 pub struct StatelessSession;
 
 impl DbHarnessSession for StatelessSession {
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
+    fn delete(&self, _: i64) -> Result<(), Box<dyn error::Error>> {
         return Ok(());
     }
-    fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
+    fn insert(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
         return Ok(());
     }
-    fn read(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
+    fn read(&self, _: i64) -> Result<Session, Box<dyn error::Error>> {
         return Ok(Session::stateless());
     }
-    fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
+    fn update(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
         return Ok(());
     }
 

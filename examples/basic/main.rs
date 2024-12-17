@@ -1,7 +1,7 @@
 mod types;
 
 use sheesh::{
-    harness::{sqlite::session, DbHarness},
+    harness::DbHarness,
     session::SessionManagerConfig,
     user::{UserManagerConfig, UserMeta},
 };

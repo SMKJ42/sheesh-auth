@@ -4,10 +4,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::named_params;
 
-use crate::{
-    harness::DbHarnessUser,
-    user::{PrivateUserMeta, PublicUserMeta, UserMeta},
-};
+use crate::{harness::DbHarnessUser, user::UserMeta};
 
 pub struct SqliteHarnessUser {
     connection: Pool<SqliteConnectionManager>,
@@ -45,7 +42,6 @@ impl DbHarnessUser for SqliteHarnessUser {
     }
 
     fn insert(&self, user: &UserMeta) -> Result<(), Box<dyn error::Error>> {
-        //TODO: dynamically utilize the fields in the .public_meta and .private_meta
         self.connection.get()?.execute(
             "INSERT INTO users (id, session_id, username, secret, ban, groups, role)
                     VALUES (:id, :session_id, :username, :secret, :ban, :groups, :role)",
