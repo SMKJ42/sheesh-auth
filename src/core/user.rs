@@ -232,7 +232,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UserMeta {
     id: i64,
     session_id: Option<i64>,
