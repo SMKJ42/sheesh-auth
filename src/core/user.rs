@@ -93,7 +93,7 @@ where
         session_manager: &SessionManager<Id, Sh, Th>,
         username: &str,
         pwd: &str,
-    ) -> Result<(RefreshSecret, AccessSecret), UserManagerError>
+    ) -> Result<(UserMeta, RefreshSecret, AccessSecret), UserManagerError>
     where
         Id: IdGenerator,
         Sh: DbHarnessSession,
@@ -123,8 +123,8 @@ where
                 match sess_res {
                     Ok((session, refresh, access)) => {
                         user.session_id = Some(session.id());
-                        self.update_user(user)?;
-                        return Ok((refresh, access));
+                        self.update_user(&user)?;
+                        return Ok((user, refresh, access));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -199,8 +199,8 @@ where
         (self.verify_pass_fn)(pwd, &user.secret)
     }
 
-    pub fn update_user(&self, user: UserMeta) -> Result<(), Box<dyn error::Error>> {
-        return self.harness.update(&user);
+    pub fn update_user(&self, user: &UserMeta) -> Result<(), Box<dyn error::Error>> {
+        return self.harness.update(user);
     }
 
     pub fn update_password(

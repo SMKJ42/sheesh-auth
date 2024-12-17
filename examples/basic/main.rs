@@ -46,7 +46,7 @@ fn main() {
         let pwd_str = "pwd";
 
         match user_manager.login(&session_manager, &user.username(), pwd_str) {
-            Ok((refresh_secret, _access_secret)) => {
+            Ok((user, refresh_secret, _access_secret)) => {
                 // creating a new access token
                 let mut session = session_manager
                     .get_session(user.session_id().unwrap())
