@@ -1,12 +1,13 @@
 mod entity;
 
 pub mod session;
+mod test;
 pub mod token;
 pub mod user;
 
-use session::*;
-use token::*;
-use user::*;
+use core::error;
+
+use self::{session::SqliteHarnessSession, token::SqliteHarnessToken, user::SqliteHarnessUser};
 
 use rusqlite::ToSql;
 
@@ -18,20 +19,26 @@ use super::{
     DbHarness,
 };
 
-impl DbHarness<SqliteHarnessUser, SqliteHarnessSession, SqliteHarnessToken> {
-    pub fn new_sqlite(pool: Pool<SqliteConnectionManager>) -> Self {
+/// A default table schema for users, sessions and tokens.
+impl<'a> DbHarness<SqliteHarnessUser<'a>, SqliteHarnessSession<'a>, SqliteHarnessToken<'a>> {
+    pub fn new_sqlite(pool: &'a Pool<SqliteConnectionManager>) -> Self {
         return DbHarness {
-            user: SqliteHarnessUser::new(pool.clone()),
-            session: SqliteHarnessSession::new(pool.clone()),
-            token: SqliteHarnessToken::new(pool),
+            user: SqliteHarnessUser::new(&pool),
+            session: SqliteHarnessSession::new(&pool),
+            token: SqliteHarnessToken::new(&pool),
         };
     }
 }
 
-impl DbHarness<SqliteHarnessUser, StatelessSession, StatelessToken> {
-    pub fn new_stateless_sqlite(pool: Pool<SqliteConnectionManager>) -> Self {
+/// WARNING: Not for production use unless you have a REALLY good reason to not store sessions or tokens.
+///
+/// This module is particularly useful when you do not want to store a session, or tokens.
+///
+/// This module relies on a user to authenticate for each connection request through the [login](crate::core::user::UserManager::login) method.
+impl<'a> DbHarness<SqliteHarnessUser<'a>, StatelessSession, StatelessToken> {
+    pub fn new_stateless_sqlite(pool: &'a Pool<SqliteConnectionManager>) -> Self {
         return DbHarness {
-            user: SqliteHarnessUser::new(pool.clone()),
+            user: SqliteHarnessUser::new(&pool),
             session: StatelessSession,
             token: StatelessToken,
         };
@@ -40,4 +47,16 @@ impl DbHarness<SqliteHarnessUser, StatelessSession, StatelessToken> {
 
 pub trait IntoValues {
     fn into_values(&self) -> &[(&str, &dyn ToSql)];
+}
+
+pub fn map_sql_result<T>(
+    res: Result<T, rusqlite::Error>,
+) -> Result<Option<T>, Box<dyn error::Error>> {
+    return match res {
+        Ok(session) => Ok(Some(session)),
+        Err(err) => match err {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            _ => Err(err.into()),
+        },
+    };
 }

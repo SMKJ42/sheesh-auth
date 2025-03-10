@@ -4,6 +4,12 @@ use crate::{auth_token::AuthToken, session::Session};
 
 use super::{DbHarnessSession, DbHarnessToken};
 
+/// WARNING: Not for production use unless you have a REALLY good reason to not store sessions or tokens.
+///
+/// This module is particularly useful when you do not want to store a session, or tokens.
+///
+/// To use this method, check out [`StatelessSession] for handling your harness typedefs in side of [SessionManager](crate::core::session::SessionManager).
+/// This module relies on a user to authenticate for each connection request through the [login](crate::core::user::UserManager::login) method.
 pub struct StatelessSession;
 
 impl DbHarnessSession for StatelessSession {
@@ -13,8 +19,11 @@ impl DbHarnessSession for StatelessSession {
     fn insert(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
         return Ok(());
     }
-    fn read(&self, _: i64) -> Result<Session, Box<dyn error::Error>> {
-        return Ok(Session::stateless());
+    fn read_by_id(&self, _: i64) -> Result<Option<Session>, Box<dyn std::error::Error>> {
+        return Ok(None);
+    }
+    fn read_by_user_id(&self, _: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
+        return Ok(None);
     }
     fn update(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
         return Ok(());
@@ -25,6 +34,12 @@ impl DbHarnessSession for StatelessSession {
     }
 }
 
+/// WARNING: Not for production use unless you have a REALLY good reason to not store sessions or tokens.
+///
+/// This module is particularly useful when you do not want to store a session, or tokens.
+///
+/// To use this method, check out [`StatelessSession`] for handling your harness typedefs in side of [SessionManager](crate::core::session::SessionManager).
+/// This module relies on a user to authenticate for each connection request through the [login](crate::core::user::UserManager::login) method.
 pub struct StatelessToken;
 
 impl DbHarnessToken for StatelessToken {

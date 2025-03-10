@@ -1,10 +1,6 @@
 mod types;
 
-use sheesh::{
-    harness::DbHarness,
-    session::SessionManagerConfig,
-    user::{UserManagerConfig, UserMeta},
-};
+use sheesh::{harness::DbHarness, session::SessionManagerConfig, user::UserManagerConfig};
 
 extern crate r2d2;
 extern crate r2d2_sqlite;
@@ -28,7 +24,7 @@ fn main() {
     let pool = r2d2::Pool::new(conn_manager).unwrap();
 
     // initalize db harness. if you would like to see how to implement your own, look inside the harness modules.
-    let harness = DbHarness::new_sqlite(pool);
+    let harness = DbHarness::new_sqlite(&pool);
 
     // once the harness is selected, go ahead and initialize tables. Init tables creates a table if user, session and token tables do not already exist.
     harness.init_tables().unwrap();
@@ -39,8 +35,8 @@ fn main() {
     let mut i = 0;
 
     while i < 100 {
-        let user: UserMeta = user_manager
-            .create_user(i.to_string(), "pwd".to_string(), Roles::Admin.as_role())
+        let user = user_manager
+            .create_user(i.to_string(), "pwd", Roles::Admin.as_role())
             .unwrap();
 
         let pwd_str = "pwd";
@@ -49,8 +45,10 @@ fn main() {
             Ok((user, refresh_secret, _access_secret)) => {
                 // creating a new access token
                 let mut session = session_manager
-                    .get_session(user.session_id().unwrap())
-                    .unwrap();
+                    .get_session_by_id(user.session_id().unwrap())
+                    .unwrap()
+                    // Some(session) ->
+                    .expect("No Session found in DB");
 
                 let _access_secret = session_manager
                     .create_new_access_token(&mut session, user.id())

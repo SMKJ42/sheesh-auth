@@ -6,18 +6,16 @@ use std::{
 
 use super::{
     default_hash_fn, default_rng_salt_fn, default_rng_token_fn, default_verify_token_fn,
-    id::{DefaultIdGenerator, IdGenerator},
+    id::{DefaultIdGenerator, IdGenerator, ZerodIdGenerator},
 };
 use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 
+const DEFAULT_ACCESS_TTL: i64 = 30;
+const DEFAULT_REFRESH_TTL: i64 = 60;
+
 #[derive(Debug, Clone)]
 pub enum TokenType {
-    Refresh { secret: String },
-    Access { token: String },
-}
-
-pub enum TokenTtl {
-    Refresh(i64),
+    Refresh,
     Access,
 }
 
@@ -25,7 +23,8 @@ pub struct AuthTokenManagerConfig<T>
 where
     T: IdGenerator,
 {
-    ttl: i64,
+    access_ttl: i64,
+    refresh_ttl: i64,
     id_generator: T,
     salt_fn: fn() -> String,
     token_fn: fn() -> String,
@@ -36,7 +35,8 @@ where
 impl AuthTokenManagerConfig<DefaultIdGenerator> {
     pub fn default() -> Self {
         return Self {
-            ttl: 30,
+            access_ttl: DEFAULT_ACCESS_TTL,
+            refresh_ttl: DEFAULT_REFRESH_TTL,
             id_generator: DefaultIdGenerator {},
             salt_fn: default_rng_salt_fn,
             token_fn: default_rng_token_fn,
@@ -46,13 +46,56 @@ impl AuthTokenManagerConfig<DefaultIdGenerator> {
     }
 }
 
+impl AuthTokenManagerConfig<ZerodIdGenerator> {
+    pub fn new_stateless() -> Self {
+        return Self {
+            access_ttl: DEFAULT_ACCESS_TTL,
+            refresh_ttl: DEFAULT_REFRESH_TTL,
+            id_generator: ZerodIdGenerator {},
+            salt_fn: || return String::new(),
+            token_fn: || return String::new(),
+            hash_fn: |_, _| return Ok(String::new()),
+            verify_token_fn: |_, _| return Ok(()),
+        };
+    }
+}
+
+impl<T: IdGenerator> AuthTokenManagerConfig<T> {
+    pub fn new(
+        id_generator: T,
+        salt_fn: fn() -> String,
+        token_fn: fn() -> String,
+        hash_fn: fn(&str, &str) -> Result<String, AuthTokenError>,
+        verify_token_fn: fn(&str, &str) -> Result<(), AuthTokenError>,
+    ) -> Self {
+        return Self {
+            access_ttl: DEFAULT_ACCESS_TTL,
+            refresh_ttl: DEFAULT_REFRESH_TTL,
+            id_generator,
+            salt_fn,
+            token_fn,
+            hash_fn,
+            verify_token_fn,
+        };
+    }
+
+    pub fn set_access_ttl(&mut self, new_ttl: i64) {
+        self.access_ttl = new_ttl;
+    }
+
+    pub fn set_refresh_ttl(&mut self, new_ttl: i64) {
+        self.refresh_ttl = new_ttl;
+    }
+}
+
 impl<T> AuthTokenManagerConfig<T>
 where
     T: IdGenerator + Copy,
 {
     pub fn init<V: DbHarnessToken>(&self, harness: V) -> AuthTokenManager<T, V> {
         AuthTokenManager {
-            ttl: self.ttl,
+            access_ttl: self.access_ttl,
+            refresh_ttl: self.refresh_ttl,
             id_generator: self.id_generator,
             harness,
             salt_fn: self.salt_fn,
@@ -68,7 +111,8 @@ where
     T: IdGenerator,
     V: DbHarnessToken,
 {
-    ttl: i64,
+    refresh_ttl: i64,
+    access_ttl: i64,
     id_generator: T,
     salt_fn: fn() -> String,
     token_fn: fn() -> String,
@@ -85,39 +129,30 @@ where
     pub fn next_token(
         &self,
         user_id: i64,
-        ttl: TokenTtl,
+        token_type: TokenType,
     ) -> Result<(AuthToken, String), TokenManagerError> {
         let id = i64::from_be_bytes(self.id_generator.new_u64().to_be_bytes());
         let token = (self.token_fn)();
         let auth_token: AuthToken;
-        let secret: String;
 
-        match ttl {
-            // if we have a longer lived session token, we want to salt it.
-            TokenTtl::Refresh(ttl) => {
-                let salt = (self.salt_fn)();
-                secret = (self.hash_fn)(&token, &salt)?;
-                let token_type = TokenType::Refresh {
-                    secret: secret.clone(),
-                };
+        let salt = (self.salt_fn)();
+        let salted_hash = (self.hash_fn)(&token, &salt)?;
 
-                auth_token = AuthToken::new(id, user_id, token_type, ttl)?;
+        match token_type {
+            TokenType::Access => {
+                auth_token = AuthToken::new_access(id, user_id, salted_hash, self.access_ttl)?;
             }
 
-            // if we have a access token, we only want the RNG string to be stored.
-            TokenTtl::Access => {
-                let token_type = TokenType::Access {
-                    token: token.clone(),
-                };
-
-                secret = token;
-                auth_token = AuthToken::new(id, user_id, token_type, self.ttl)?;
+            TokenType::Refresh => {
+                auth_token = AuthToken::new_refresh(id, user_id, salted_hash, self.refresh_ttl)?;
             }
         }
-        match self.harness.insert(&auth_token) {
-            Ok(()) => return Ok((auth_token, secret)),
-            Err(err) => return Err(TokenManagerError::Harness(err)),
-        }
+
+        self.harness
+            .insert(&auth_token)
+            .map_err(|err| TokenManagerError::Harness(err))?;
+
+        return Ok((auth_token, token));
     }
 
     pub fn untrusted_verify_refresh_token(
@@ -126,17 +161,19 @@ where
         user_id: i64,
         token_str: &str,
     ) -> Result<(), TokenManagerError> {
-        match self.harness.read_refresh_token(token_id) {
-            Ok(token_opt) => match token_opt {
-                Some(auth_token) => match self.trusted_verify_token(auth_token, user_id, token_str)
-                {
-                    Ok(()) => return Ok(()),
-                    Err(err) => return Err(err.into()),
-                },
-                None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
-            },
-            Err(err) => return Err(TokenManagerError::Harness(err)),
-        }
+        let token_opt = self
+            .harness
+            .read_refresh_token(token_id)
+            .map_err(|err| TokenManagerError::Harness(err))?;
+
+        match token_opt {
+            Some(auth_token) => {
+                return self
+                    .trusted_verify_token(auth_token, user_id, token_str)
+                    .map_err(|err| err.into());
+            }
+            None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
+        };
     }
 
     pub fn untrusted_verify_access_token(
@@ -145,17 +182,19 @@ where
         user_id: i64,
         token_str: &str,
     ) -> Result<(), TokenManagerError> {
-        match self.harness.read_access_token(token_id) {
-            Ok(token_opt) => match token_opt {
-                Some(auth_token) => match self.trusted_verify_token(auth_token, user_id, token_str)
-                {
-                    Ok(()) => return Ok(()),
-                    Err(err) => return Err(err.into()),
-                },
-                None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
-            },
-            Err(err) => return Err(TokenManagerError::Harness(err)),
-        }
+        let token_opt = self
+            .harness
+            .read_access_token(token_id)
+            .map_err(|err| TokenManagerError::Harness(err))?;
+
+        match token_opt {
+            Some(auth_token) => {
+                return self
+                    .trusted_verify_token(auth_token, user_id, token_str)
+                    .map_err(|err| err.into());
+            }
+            None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
+        };
     }
 
     pub fn trusted_verify_token(
@@ -170,25 +209,11 @@ where
             return Err(AuthTokenError::new(AuthTokenErrorKind::Invalid));
         }
 
-        match &auth_token.token_type {
-            TokenType::Access { token } => {
-                if token != &token_str {
-                    return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized));
-                } else if auth_token.is_expired() {
-                    // try to clean up, if fails, we can clean up later with a cron job.
-                    let _ = self.harness.delete_access_token(auth_token.id());
-                    return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
-                } else {
-                    return Ok(());
-                }
-            }
-            TokenType::Refresh { secret } => {
-                if auth_token.is_expired() {
-                    return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
-                } else {
-                    return (self.verify_token_fn)(&token_str, &secret).into();
-                }
-            }
+        if auth_token.is_expired() {
+            let _ = self.harness.delete_access_token(auth_token.id());
+            return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
+        } else {
+            return Ok((self.verify_token_fn)(&token_str, &auth_token.salted_hash)?);
         }
     }
 
@@ -245,16 +270,16 @@ pub struct AuthToken {
     id: i64,
     user_id: i64,
     token_type: TokenType,
+    salted_hash: String,
     expires: DateTime<Utc>,
     valid: bool,
 }
 
 impl AuthToken {
-    /// AuthToken::new() should only be called from AuthTokenManager.
-    pub fn new(
+    pub fn new_access(
         id: i64,
         user_id: i64,
-        token_type: TokenType,
+        salted_hash: String,
         ttl: i64,
     ) -> Result<Self, AuthTokenError> {
         let expires = get_token_expiry(ttl)?;
@@ -262,7 +287,26 @@ impl AuthToken {
         return Ok(AuthToken {
             id,
             user_id,
-            token_type,
+            token_type: TokenType::Access,
+            salted_hash,
+            expires,
+            valid: true,
+        });
+    }
+
+    pub fn new_refresh(
+        id: i64,
+        user_id: i64,
+        salted_hash: String,
+        ttl: i64,
+    ) -> Result<Self, AuthTokenError> {
+        let expires = get_token_expiry(ttl)?;
+
+        return Ok(AuthToken {
+            id,
+            user_id,
+            token_type: TokenType::Refresh,
+            salted_hash,
             expires,
             valid: true,
         });
@@ -271,6 +315,7 @@ impl AuthToken {
     pub fn from_values(
         id: i64,
         user_id: i64,
+        salted_hash: String,
         token_type: TokenType,
         expires: DateTime<Utc>,
         valid: bool,
@@ -278,6 +323,7 @@ impl AuthToken {
         return Self {
             id,
             user_id,
+            salted_hash,
             token_type,
             expires,
             valid,
@@ -302,6 +348,10 @@ impl AuthToken {
 
     pub fn expires(&self) -> DateTime<Utc> {
         return self.expires;
+    }
+
+    pub fn salted_hash(&self) -> &str {
+        return &self.salted_hash;
     }
 
     pub fn token_type(&self) -> TokenType {

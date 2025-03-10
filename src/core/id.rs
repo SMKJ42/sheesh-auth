@@ -1,13 +1,13 @@
-use std::ops::Shl;
+use std::{fmt::Debug, ops::Shl};
 
 use scrypt::password_hash::rand_core::{OsRng, RngCore};
 
-pub trait IdGenerator {
+pub trait IdGenerator: Debug {
     fn new_u64(&self) -> u64;
     fn new_u128(&self) -> u128;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct DefaultIdGenerator {}
 
 impl IdGenerator for DefaultIdGenerator {
@@ -21,8 +21,14 @@ impl IdGenerator for DefaultIdGenerator {
     }
 }
 
-impl DefaultIdGenerator {
-    pub fn init() -> Self {
-        return Self {};
+#[derive(Clone, Copy, Debug)]
+pub struct ZerodIdGenerator {}
+
+impl IdGenerator for ZerodIdGenerator {
+    fn new_u128(&self) -> u128 {
+        return 0;
+    }
+    fn new_u64(&self) -> u64 {
+        return 0;
     }
 }

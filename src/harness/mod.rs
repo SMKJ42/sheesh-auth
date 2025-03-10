@@ -5,7 +5,7 @@ pub mod stateless;
 
 use std::{error, fmt::Display};
 
-use crate::{auth_token::AuthToken, session::Session, user::UserMeta};
+use crate::{auth_token::AuthToken, session::Session, user::UserData};
 
 pub enum Db {
     MySql,
@@ -38,25 +38,29 @@ impl From<Box<dyn error::Error>> for HarnessError {
 
 pub trait DbHarnessUser {
     fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
-    fn read_by_id(&self, id: i64) -> Result<Option<UserMeta>, Box<dyn error::Error>>;
-    fn read_by_username(&self, username: &str) -> Result<Option<UserMeta>, Box<dyn error::Error>>;
-    fn update(&self, item: &UserMeta) -> Result<(), Box<dyn error::Error>>;
-    fn set_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, item: &UserMeta) -> Result<(), Box<dyn error::Error>>;
+    fn read_by_id(&self, id: i64) -> Result<Option<UserData>, Box<dyn error::Error>>;
+    fn read_by_username(&self, username: &str) -> Result<Option<UserData>, Box<dyn error::Error>>;
+    // A helper function to update username, groups and role in one function.
+    fn update(&self, item: &UserData) -> Result<(), Box<dyn error::Error>>;
+    // A function to update the session_id, calling .update() will not update this field.
+    fn update_session_id(
+        &self,
+        user_id: i64,
+        session_id: Option<i64>,
+    ) -> Result<(), Box<dyn error::Error>>;
+    // A function to update the salted_hash, calling .update() will not update this field.
+    fn update_salted_hash(&self, id: i64, salted_hash: String)
+        -> Result<(), Box<dyn error::Error>>;
+    // A function to update the ban, calling .update() will not update this field.
+    fn update_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>>;
+    fn insert(&self, item: &UserData) -> Result<(), Box<dyn error::Error>>;
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-
-    // fn write_role(&self) -> Result<(), Box<dyn error::Error>>;
-    // fn insert_group(&self) -> Result<(), Box<dyn error::Error>>;
-    // fn remove_group(&self) -> Result<(), Box<dyn error::Error>>;
-    // // change signature to fn(pu: PublicUserMeta) -> SqlString ?
-    // fn update_public(&self) -> Result<(), Box<dyn error::Error>>;
-    // fn update_private(&self) -> Result<(), Box<dyn error::Error>>;
-    // fn ban(&self) -> Result<(), Box<dyn error::Error>>;
 }
 
 pub trait DbHarnessSession {
     fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
-    fn read(&self, id: i64) -> Result<Session, Box<dyn error::Error>>;
+    fn read_by_id(&self, user_id: i64) -> Result<Option<Session>, Box<dyn error::Error>>;
+    fn read_by_user_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>>;
     fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
     fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
@@ -70,24 +74,6 @@ pub trait DbHarnessToken {
     fn delete_resfresh_token(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
     fn read_refresh_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
     fn read_access_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
-}
-
-pub fn repeat_vars(count: usize) -> String {
-    assert_ne!(count, 0);
-    let mut s = "?,".repeat(count);
-    // Remove trailing comma
-    s.pop();
-    s
-}
-
-pub fn repeat_fields(cols: Vec<String>) -> String {
-    let mut fields = String::new();
-    for i in 0..cols.len() - 1 {
-        fields.extend([&cols[i], ", "]);
-    }
-    fields += &cols[cols.len() - 1];
-
-    return fields;
 }
 
 pub struct DbHarness<T, U, V>

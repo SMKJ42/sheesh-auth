@@ -9,17 +9,19 @@ use crate::{
     harness::DbHarnessToken,
 };
 
-pub struct SqliteHarnessToken {
-    connection: Pool<SqliteConnectionManager>,
+use super::map_sql_result;
+
+pub struct SqliteHarnessToken<'a> {
+    connection: &'a Pool<SqliteConnectionManager>,
 }
 
-impl SqliteHarnessToken {
-    pub fn new(connection: Pool<SqliteConnectionManager>) -> Self {
-        Self { connection }
+impl<'a> SqliteHarnessToken<'a> {
+    pub fn new(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+        Self { connection: pool }
     }
 }
 
-impl DbHarnessToken for SqliteHarnessToken {
+impl<'a> DbHarnessToken for SqliteHarnessToken<'a> {
     fn delete_access_token(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
         self.connection
             .get()?
@@ -37,24 +39,24 @@ impl DbHarnessToken for SqliteHarnessToken {
     fn insert(&self, auth_token: &AuthToken) -> Result<(), Box<dyn error::Error>> {
         let connection = self.connection.get()?;
         match &auth_token.token_type() {
-            TokenType::Refresh { secret } => connection.execute(
-                "INSERT INTO refresh_tokens (id, user_id, secret, expires, valid)
-                    VALUES (:id, :user_id, :secret, :expires, :valid",
+            TokenType::Refresh => connection.execute(
+                "INSERT INTO refresh_tokens (id, user_id, salted_hash, expires, valid)
+                    VALUES (:id, :user_id, :salted_hash, :expires, :valid)",
                 named_params! {
                     ":id": auth_token.id(),
                     ":user_id": auth_token.user_id(),
-                    ":secret": secret,
+                    ":salted_hash": auth_token.salted_hash(),
                     ":expires": auth_token.expires(),
                     ":valid": auth_token.is_valid(),
                 },
             )?,
-            TokenType::Access { token } => connection.execute(
-                "INSERT INTO access_tokens (id, user_id, token, expires, valid) 
-                    VALUES (:id, :user_id, :token, :expires, :valid",
+            TokenType::Access => connection.execute(
+                "INSERT INTO access_tokens (id, user_id, salted_hash, expires, valid) 
+                    VALUES (:id, :user_id, :salted_hash, :expires, :valid)",
                 named_params! {
                     ":id": auth_token.id(),
                     ":user_id": auth_token.user_id(),
-                    ":secret": token,
+                    ":salted_hash": auth_token.salted_hash(),
                     ":expires": auth_token.expires(),
                     ":valid": auth_token.is_valid(),
                 },
@@ -79,7 +81,7 @@ impl DbHarnessToken for SqliteHarnessToken {
             )?,
             TokenType::Access { .. } => connection.execute(
                 "UPDATE access_tokens
-                    SET valid = :valid,
+                    SET valid = :valid
                     WHERE id = :id",
                 named_params! {
                     ":valid": auth_token.is_valid(),
@@ -98,7 +100,7 @@ impl DbHarnessToken for SqliteHarnessToken {
             "CREATE TABLE IF NOT EXISTS refresh_tokens (
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER NOT NULL,
-                    secret STRING NOT NULL,
+                    salted_hash STRING NOT NULL,
                     expires DATETIME NOT NULL,
                     valid BOOL NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES users(id)
@@ -114,7 +116,7 @@ impl DbHarnessToken for SqliteHarnessToken {
             "CREATE TABLE IF NOT EXISTS access_tokens (
                     id INTEGER PRIMARY KEY NOT NULL,
                     user_id INTEGER NOT NULL,
-                    token STRING NOT NULL,
+                    salted_hash STRING NOT NULL,
                     expires DATETIME NOT NULL,
                     valid BOOL NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES users(id)
@@ -132,44 +134,52 @@ impl DbHarnessToken for SqliteHarnessToken {
     fn read_access_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>> {
         let connection = self.connection.get()?;
 
-        match connection.query_row(
+        let res = connection.query_row(
             "SELECT * FROM access_tokens WHERE id = :id;",
             named_params! {":id": id},
             |row| {
                 let user_id = row.get(1)?;
-                let token_type = TokenType::Access { token: row.get(2)? };
+                let salted_hash = row.get(2)?;
+                let token_type = TokenType::Access;
                 let expires = row.get(3)?;
                 let valid = row.get(4)?;
                 return Ok(AuthToken::from_values(
-                    id, user_id, token_type, expires, valid,
+                    id,
+                    user_id,
+                    salted_hash,
+                    token_type,
+                    expires,
+                    valid,
                 ));
             },
-        ) {
-            Ok(token) => return Ok(Some(token)),
-            Err(err) => return Err(err.into()),
-        }
+        );
+
+        return map_sql_result(res);
     }
 
     fn read_refresh_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>> {
         let connection = self.connection.get()?;
 
-        match connection.query_row(
+        let res = connection.query_row(
             "SELECT * FROM refresh_tokens WHERE id = :id;",
             named_params! {":id": id},
             |row| {
                 let user_id = row.get(1)?;
-                let token_type = TokenType::Refresh {
-                    secret: row.get(2)?,
-                };
+                let salted_hash = row.get(2)?;
+                let token_type = TokenType::Refresh;
                 let expires = row.get(3)?;
                 let valid = row.get(4)?;
                 return Ok(AuthToken::from_values(
-                    id, user_id, token_type, expires, valid,
+                    id,
+                    user_id,
+                    salted_hash,
+                    token_type,
+                    expires,
+                    valid,
                 ));
             },
-        ) {
-            Ok(token) => return Ok(Some(token)),
-            Err(err) => return Err(err.into()),
-        }
+        );
+
+        return map_sql_result(res);
     }
 }

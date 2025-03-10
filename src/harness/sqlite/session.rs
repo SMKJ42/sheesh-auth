@@ -6,17 +6,19 @@ use rusqlite::named_params;
 
 use crate::{harness::DbHarnessSession, session::Session};
 
-pub struct SqliteHarnessSession {
-    connection: Pool<SqliteConnectionManager>,
+use super::map_sql_result;
+
+pub struct SqliteHarnessSession<'a> {
+    connection: &'a Pool<SqliteConnectionManager>,
 }
 
-impl SqliteHarnessSession {
-    pub fn new(connection: Pool<SqliteConnectionManager>) -> Self {
-        Self { connection }
+impl<'a> SqliteHarnessSession<'a> {
+    pub fn new(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+        Self { connection: pool }
     }
 }
 
-impl DbHarnessSession for SqliteHarnessSession {
+impl<'a> DbHarnessSession for SqliteHarnessSession<'a> {
     fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
         self.connection
             .get()?
@@ -24,21 +26,22 @@ impl DbHarnessSession for SqliteHarnessSession {
         return Ok(());
     }
     fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
+        println!("{:?}", session);
+
         self.connection.get()?.execute(
-            "INSERT INTO sessions (id, user_id, refresh_token, access_token)
-                        VALUES (:id, :user_id, :refresh_token, :access_token)",
+            "INSERT INTO sessions (id, user_id, refresh_token, access_token) VALUES (:id, :user_id, :refresh_token, :access_token)",
             named_params![
                 ":id": session.id(),
                 ":user_id": session.user_id(),
                 ":refresh_token": session.refresh_token(),
-                ":access_token": session.access_token()
+                ":access_token": session.access_token(),
             ],
         )?;
         return Ok(());
     }
-    fn read(&self, id: i64) -> Result<Session, Box<dyn error::Error>> {
+    fn read_by_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
         let connection = self.connection.get()?;
-        match connection.query_row(
+        let res = connection.query_row(
             "SELECT * FROM sessions WHERE id = :id",
             named_params! {":id": id},
             |row| {
@@ -52,10 +55,30 @@ impl DbHarnessSession for SqliteHarnessSession {
                     access_token,
                 ));
             },
-        ) {
-            Ok(session) => return Ok(session),
-            Err(err) => return Err(err.into()),
-        };
+        );
+
+        return map_sql_result(res);
+    }
+
+    fn read_by_user_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
+        let connection = self.connection.get()?;
+        let res = connection.query_row(
+            "SELECT * FROM sessions WHERE user_id = :user_id",
+            named_params! {":user_id": id},
+            |row| {
+                let user_id = row.get(1)?;
+                let refresh_token = row.get(2)?;
+                let access_token = row.get(3)?;
+                return Ok(Session::from_values(
+                    id,
+                    user_id,
+                    refresh_token,
+                    access_token,
+                ));
+            },
+        );
+
+        return map_sql_result(res);
     }
     fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
         let connection = self.connection.get()?;
