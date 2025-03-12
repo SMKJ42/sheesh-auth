@@ -5,8 +5,6 @@ mod test;
 pub mod token;
 pub mod user;
 
-use core::error;
-
 use self::{session::SqliteHarnessSession, token::SqliteHarnessToken, user::SqliteHarnessUser};
 
 use rusqlite::ToSql;
@@ -16,7 +14,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 
 use super::{
     stateless::{StatelessSession, StatelessToken},
-    DbHarness,
+    DbHarness, HarnessError,
 };
 
 /// A default table schema for users, sessions and tokens.
@@ -49,14 +47,12 @@ pub trait IntoValues {
     fn into_values(&self) -> &[(&str, &dyn ToSql)];
 }
 
-pub fn map_sql_result<T>(
-    res: Result<T, rusqlite::Error>,
-) -> Result<Option<T>, Box<dyn error::Error>> {
+pub fn map_sql_result<T>(res: Result<T, rusqlite::Error>) -> Result<Option<T>, HarnessError> {
     return match res {
         Ok(session) => Ok(Some(session)),
         Err(err) => match err {
             rusqlite::Error::QueryReturnedNoRows => Ok(None),
-            _ => Err(err.into()),
+            _ => Err(HarnessError(Box::new(err))),
         },
     };
 }

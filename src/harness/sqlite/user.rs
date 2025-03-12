@@ -1,10 +1,13 @@
-use std::{error, result};
+use std::result;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::named_params;
 
-use crate::{harness::DbHarnessUser, user::UserData};
+use crate::{
+    harness::{harness_error, DbHarnessUser, HarnessError},
+    user::UserData,
+};
 
 use super::map_sql_result;
 
@@ -19,78 +22,81 @@ impl<'a> SqliteHarnessUser<'a> {
 }
 
 impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
+    fn delete(&self, id: i64) -> Result<(), HarnessError> {
         self.connection
-            .get()?
-            .prepare("DELETE FROM users WHERE id = ?")?
-            .execute([id])?;
+            .get()
+            .map_err(harness_error)?
+            .prepare("DELETE FROM users WHERE id = ?")
+            .map_err(harness_error)?
+            .execute([id])
+            .map_err(harness_error)?;
         return Ok(());
     }
 
-    fn insert(&self, user: &UserData) -> Result<(), Box<dyn error::Error>> {
-        self.connection.get()?.execute(
-            "INSERT INTO users (id, session_id, username, salted_hash, ban, groups, role)
-                    VALUES (:id, :session_id, :username, :salted_hash, :ban, :groups, :role)",
+    fn insert(&self, user: &UserData) -> Result<(), HarnessError> {
+        self.connection.get().map_err(harness_error)?.execute(
+            "INSERT INTO users (id, username, salted_hash, is_banned, groups, role, failed_attempts)
+                    VALUES (:id, :username, :salted_hash, :is_banned, :groups, :role, :failed_attempts)",
             named_params! {
                 ":id": user.id(),
-                ":session_id": user.session_id(),
                 ":username": user.username(),
                 ":salted_hash": user.salted_hash(),
-                ":ban": user.is_banned(),
+                ":is_banned": user.is_banned(),
                 ":groups": user.groups(),
-                ":role": user.role()
+                ":role": user.role(),
+                ":failed_attempts": user.failed_attempts(),
             },
-        )?;
+        ).map_err(harness_error)?;
 
         return Ok(());
     }
-    fn read_by_id(&self, id: i64) -> Result<Option<UserData>, Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
+    fn read_by_id(&self, id: i64) -> Result<Option<UserData>, HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
         let res = conn.query_row("SELECT * FROM users WHERE id = ?", [id], |row| {
             let id = row.get(0)?;
-            let session_id = row.get(1)?;
-            let username = row.get(2)?;
-            let salted_hash = row.get(3)?;
-            let ban = row.get(4)?;
-            let groups = row.get(5)?;
-            let role = row.get(6)?;
+            let username = row.get(1)?;
+            let groups = row.get(2)?;
+            let role = row.get(3)?;
+            let failed_attempts = row.get(4)?;
+            let salted_hash = row.get(5)?;
+            let is_banned = row.get(6)?;
 
             return Ok(UserData::from_values(
                 id,
-                session_id,
                 username,
                 salted_hash,
-                ban,
+                is_banned,
                 groups,
                 role,
+                failed_attempts,
             ));
         });
 
         return map_sql_result(res);
     }
 
-    fn read_by_username(&self, username: &str) -> Result<Option<UserData>, Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
+    fn read_by_username(&self, username: &str) -> Result<Option<UserData>, HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
         let res = conn.query_row(
             "SELECT * FROM users WHERE username = ?",
             [username],
             |row| {
                 let id = row.get(0)?;
-                let session_id = row.get(1)?;
-                let username = row.get(2)?;
-                let salted_hash = row.get(3)?;
-                let ban = row.get(4)?;
-                let groups = row.get(5)?;
-                let role = row.get(6)?;
+                let username = row.get(1)?;
+                let groups = row.get(2)?;
+                let role = row.get(3)?;
+                let failed_attempts = row.get(4)?;
+                let salted_hash = row.get(5)?;
+                let is_banned = row.get(6)?;
 
                 return Ok(UserData::from_values(
                     id,
-                    session_id,
                     username,
                     salted_hash,
-                    ban,
+                    is_banned,
                     groups,
                     role,
+                    failed_attempts,
                 ));
             },
         );
@@ -98,76 +104,55 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         return map_sql_result(res);
     }
 
-    fn update(&self, user: &UserData) -> Result<(), Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
-        let res = conn.execute(
-            "UPDATE users SET 
-        session_id = :session_id,
+    fn update(&self, user: &UserData) -> Result<(), HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
+        let res = conn
+            .execute(
+                "UPDATE users SET 
         groups = :groups,
         role = :role
         WHERE id = :id",
-            named_params! {
-                ":session_id": user.session_id(),
-                ":groups": user.groups(),
-                ":role": user.role(),
-                ":id": user.id(),
-            },
-        );
+                named_params! {
+                    ":groups": user.groups(),
+                    ":role": user.role(),
+                    ":id": user.id(),
+                },
+            )
+            .map_err(harness_error)?;
 
-        match res {
-            Ok(res) => {
-                // ensure that we did not update more than one user.
-                debug_assert!(res <= 1);
-                return Ok(());
-            }
-            Err(err) => Err(err.into()),
-        }
+        debug_assert!(res <= 1);
+        return Ok(());
     }
 
-    fn create_table(&self) -> result::Result<(), Box<dyn error::Error>> {
+    fn create_table(&self) -> result::Result<(), HarnessError> {
         // TODO: the FK should not exist if the session is "stateless..."
-        let default_stmt = "CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                session_id INTEGER,
-                username STRING NOT NULL UNIQUE,
-                salted_hash STRING NOT NULL,
-                ban TINYINT NOT NULL,
-                groups STRING NOT NULL,
-                role STRING NOT NULL,
-                
-                FOREIGN KEY(session_id) REFERENCES sessions(id)
-            );";
+        let default_stmt = "CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    groups TEXT NOT NULL,
+    role TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL,
+    salted_hash TEXT NOT NULL,
+    is_banned BOOLEAN NOT NULL CHECK (is_banned IN (0, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-        self.connection.get()?.prepare(default_stmt)?.execute([])?;
+CREATE INDEX IF NOT EXISTS idx_username ON users(username);";
 
-        return Ok(());
-    }
-
-    fn update_session_id(
-        &self,
-        user_id: i64,
-        session_id: Option<i64>,
-    ) -> Result<(), Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
-        conn.execute(
-            "UPDATE users SET 
-        session_id = :session_id,
-        WHERE id = :id",
-            named_params! {
-                ":session_id": session_id,
-                ":id": user_id,
-            },
-        )?;
+        self.connection
+            .get()
+            .map_err(harness_error)?
+            .prepare(default_stmt)
+            .map_err(harness_error)?
+            .execute([])
+            .map_err(harness_error)?;
 
         return Ok(());
     }
 
-    fn update_salted_hash(
-        &self,
-        id: i64,
-        salted_hash: String,
-    ) -> Result<(), Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
+    fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
         conn.execute(
             "UPDATE users SET 
         salted_hash = :salted_hash,
@@ -176,23 +161,20 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
                 ":salted_hash": salted_hash,
                 ":id": id,
             },
-        )?;
+        )
+        .map_err(harness_error)?;
 
         return Ok(());
     }
 
-    fn update_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>> {
-        let conn = self.connection.get()?;
-        conn.execute(
-            "UPDATE users SET 
-        ban = :ban,
-        WHERE id = :id",
-            named_params! {
-                ":ban": bool,
-                ":id": id,
-            },
-        )?;
+    fn update_username(&self, id: i64, username: String) -> Result<(), HarnessError> {
+        todo!();
+    }
 
-        return Ok(());
+    fn set_attempts(&self, id: i64, count: i32) -> Result<(), HarnessError> {
+        todo!();
+    }
+    fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError> {
+        todo!();
     }
 }

@@ -16,6 +16,10 @@ pub enum Db {
 #[derive(Debug)]
 pub struct HarnessError(Box<dyn error::Error>);
 
+pub fn harness_error(err: impl error::Error + 'static) -> HarnessError {
+    return HarnessError::new(Box::new(err));
+}
+
 impl HarnessError {
     pub fn new(err: Box<dyn error::Error>) -> Self {
         return Self(err);
@@ -37,43 +41,38 @@ impl From<Box<dyn error::Error>> for HarnessError {
 }
 
 pub trait DbHarnessUser {
-    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
-    fn read_by_id(&self, id: i64) -> Result<Option<UserData>, Box<dyn error::Error>>;
-    fn read_by_username(&self, username: &str) -> Result<Option<UserData>, Box<dyn error::Error>>;
-    // A helper function to update username, groups and role in one function.
-    fn update(&self, item: &UserData) -> Result<(), Box<dyn error::Error>>;
-    // A function to update the session_id, calling .update() will not update this field.
-    fn update_session_id(
-        &self,
-        user_id: i64,
-        session_id: Option<i64>,
-    ) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self) -> Result<(), HarnessError>;
+    fn read_by_id(&self, id: i64) -> Result<Option<UserData>, HarnessError>;
+    fn read_by_username(&self, username: &str) -> Result<Option<UserData>, HarnessError>;
+    fn update(&self, item: &UserData) -> Result<(), HarnessError>;
+
+    fn insert(&self, item: &UserData) -> Result<(), HarnessError>;
+    fn delete(&self, id: i64) -> Result<(), HarnessError>;
+
     // A function to update the salted_hash, calling .update() will not update this field.
-    fn update_salted_hash(&self, id: i64, salted_hash: String)
-        -> Result<(), Box<dyn error::Error>>;
-    // A function to update the ban, calling .update() will not update this field.
-    fn update_ban(&self, id: i64, bool: bool) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, item: &UserData) -> Result<(), Box<dyn error::Error>>;
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError>;
+    fn update_username(&self, id: i64, username: String) -> Result<(), HarnessError>;
+    fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError>;
+    fn set_attempts(&self, id: i64, count: i32) -> Result<(), HarnessError>;
 }
 
 pub trait DbHarnessSession {
-    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
-    fn read_by_id(&self, user_id: i64) -> Result<Option<Session>, Box<dyn error::Error>>;
-    fn read_by_user_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>>;
-    fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>>;
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
+    fn create_table(&self) -> Result<(), HarnessError>;
+    fn read_by_id(&self, id: i64) -> Result<Option<Session>, HarnessError>;
+    fn read_by_user_id(&self, user_id: i64) -> Result<Option<Session>, HarnessError>;
+    fn insert(&self, session: &Session) -> Result<(), HarnessError>;
+    fn delete(&self, id: i64) -> Result<(), HarnessError>;
 }
 
 pub trait DbHarnessToken {
-    fn create_table(&self) -> Result<(), Box<dyn error::Error>>;
-    fn update(&self, token: &AuthToken) -> Result<(), Box<dyn error::Error>>;
-    fn insert(&self, token: &AuthToken) -> Result<(), Box<dyn error::Error>>;
-    fn delete_access_token(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn delete_resfresh_token(&self, id: i64) -> Result<(), Box<dyn error::Error>>;
-    fn read_refresh_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
-    fn read_access_token(&self, id: i64) -> Result<Option<AuthToken>, Box<dyn error::Error>>;
+    fn create_table(&self) -> Result<(), HarnessError>;
+    fn insert(&self, token: &AuthToken) -> Result<(), HarnessError>;
+    fn delete_access_token(&self, id: i64) -> Result<(), HarnessError>;
+    fn delete_access_token_by_session(&self, session_id: i64) -> Result<(), HarnessError>;
+    fn delete_resfresh_token(&self, id: i64) -> Result<(), HarnessError>;
+    fn delete_refresh_token_by_session(&self, session_id: i64) -> Result<(), HarnessError>;
+    fn read_refresh_token(&self, session_id: i64) -> Result<Option<AuthToken>, HarnessError>;
+    fn read_access_token(&self, session_id: i64) -> Result<Option<AuthToken>, HarnessError>;
 }
 
 pub struct DbHarness<T, U, V>

@@ -38,7 +38,7 @@ mod core_test {
 
     fn obtain_session(session_manager: &SqliteSessionManager, user_id: i64) -> Session {
         return session_manager
-            .get_users_session(user_id)
+            .get_session_by_user_id(user_id)
             .unwrap()
             .expect("No Session Found in DB");
     }
@@ -57,7 +57,7 @@ mod core_test {
             .expect("Error creating user");
 
         let (user, refresh_token, access_token) = user_manager
-            .login(&session_manager, &user.username(), &pwd)
+            .login(&session_manager, &user.username(), &pwd, None)
             .expect("Error logging in user");
 
         let mut session = obtain_session(&session_manager, user.id());
@@ -72,7 +72,7 @@ mod core_test {
         // TODO: test access token validation...
 
         let (refresh_token3, access_token_3) = session_manager
-            .create_new_refresh_token(&mut session, user.id(), &refresh_token)
+            .create_new_refresh_token(&mut session, user.id())
             .expect("Could not create new Refresh token");
 
         // clear the session's save state in memory and instead read it from the db...

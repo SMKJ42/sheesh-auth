@@ -64,11 +64,11 @@ mod core_test {
             .expect("Error creating user");
 
         let (user, refresh_token, access_token) = user_manager
-            .login(&session_manager, &user.username(), &pwd)
+            .login(&session_manager, &user.username(), &pwd, None)
             .expect("Error logging in user");
 
-        assert_eq!(refresh_token.as_str(), "");
-        assert_eq!(access_token.as_str(), "");
+        assert_eq!(refresh_token.secret(), "");
+        assert_eq!(access_token.secret(), "");
 
         assert_ne!(user.salted_hash(), pwd);
         assert_eq!(user.username(), username);

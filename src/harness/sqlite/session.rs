@@ -1,10 +1,11 @@
-use std::error;
-
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::named_params;
 
-use crate::{harness::DbHarnessSession, session::Session};
+use crate::{
+    harness::{harness_error, DbHarnessSession, HarnessError},
+    session::Session,
+};
 
 use super::map_sql_result;
 
@@ -19,103 +20,103 @@ impl<'a> SqliteHarnessSession<'a> {
 }
 
 impl<'a> DbHarnessSession for SqliteHarnessSession<'a> {
-    fn delete(&self, id: i64) -> Result<(), Box<dyn error::Error>> {
+    fn delete(&self, id: i64) -> Result<(), HarnessError> {
         self.connection
-            .get()?
-            .execute("DELETE FROM sessions WHERE id = ?", [id])?;
+            .get()
+            .map_err(harness_error)?
+            .execute("DELETE FROM sessions WHERE id = ?", [id])
+            .map_err(harness_error)?;
         return Ok(());
     }
-    fn insert(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
-        println!("{:?}", session);
+    fn insert(&self, session: &Session) -> Result<(), HarnessError> {
+        let ip_str = if let Some(ip_addr) = session.ip_addr() {
+            Some(ip_addr.to_string())
+        } else {
+            None
+        };
 
-        self.connection.get()?.execute(
-            "INSERT INTO sessions (id, user_id, refresh_token, access_token) VALUES (:id, :user_id, :refresh_token, :access_token)",
-            named_params![
-                ":id": session.id(),
-                ":user_id": session.user_id(),
-                ":refresh_token": session.refresh_token(),
-                ":access_token": session.access_token(),
-            ],
-        )?;
+        self.connection
+            .get()
+            .map_err(harness_error)?
+            .execute(
+                "INSERT INTO sessions (id, user_id, ip_addr, created_at, expires) 
+            VALUES (:id, :user_id, :ip_addr, :created_at, :expires)",
+                named_params![
+                    ":id": session.id(),
+                    ":user_id": session.user_id(),
+                    ":ip_addr": ip_str,
+                    ":created_at": session.created_at(),
+                    ":expires": session.expires()
+                ],
+            )
+            .map_err(harness_error)?;
         return Ok(());
     }
-    fn read_by_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
-        let connection = self.connection.get()?;
-        let res = connection.query_row(
+
+    fn read_by_id(&self, id: i64) -> Result<Option<Session>, HarnessError> {
+        let connection = self.connection.get().map_err(harness_error)?;
+        let res = match connection.query_row(
             "SELECT * FROM sessions WHERE id = :id",
             named_params! {":id": id},
             |row| {
+                // let id = row.get(0)?;
                 let user_id = row.get(1)?;
-                let refresh_token = row.get(2)?;
-                let access_token = row.get(3)?;
+                let ip_addr = row.get(2)?;
+                let created_at = row.get(3)?;
+                let expires = row.get(4)?;
                 return Ok(Session::from_values(
-                    id,
-                    user_id,
-                    refresh_token,
-                    access_token,
+                    id, user_id, ip_addr, created_at, expires,
                 ));
             },
-        );
+        ) {
+            Ok(res) => Ok(res?),
+            Err(err) => Err(err),
+        };
 
         return map_sql_result(res);
     }
 
-    fn read_by_user_id(&self, id: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
-        let connection = self.connection.get()?;
-        let res = connection.query_row(
+    fn read_by_user_id(&self, user_id: i64) -> Result<Option<Session>, HarnessError> {
+        let connection = self.connection.get().map_err(harness_error)?;
+        let res = match connection.query_row(
             "SELECT * FROM sessions WHERE user_id = :user_id",
-            named_params! {":user_id": id},
+            named_params! {":user_id": user_id},
             |row| {
-                let user_id = row.get(1)?;
-                let refresh_token = row.get(2)?;
-                let access_token = row.get(3)?;
+                let id = row.get(0)?;
+                // let user_id = row.get(1)?;
+                let ip_addr = row.get(2)?;
+                let created_at = row.get(3)?;
+                let expires = row.get(4)?;
                 return Ok(Session::from_values(
-                    id,
-                    user_id,
-                    refresh_token,
-                    access_token,
+                    id, user_id, ip_addr, created_at, expires,
                 ));
             },
-        );
+        ) {
+            Ok(res) => Ok(res?),
+            Err(err) => Err(err),
+        };
 
         return map_sql_result(res);
     }
-    fn update(&self, session: &Session) -> Result<(), Box<dyn error::Error>> {
-        let connection = self.connection.get()?;
 
-        connection.execute(
-            "UPDATE sessions 
-                SET refresh_token = :refresh_token, access_token = :access_token
-                WHERE id = :id",
-            named_params![
-                ":refresh_token": session.refresh_token(),
-                ":access_token": session.access_token(),
-                ":id": session.id()
-            ],
-        )?;
+    fn create_table(&self) -> Result<(), HarnessError> {
+        let connection = self.connection.get().map_err(harness_error)?;
+        connection
+            .execute(CREATE_SESSION_TABLE_STATEMENT, [])
+            .map_err(harness_error)?;
 
-        return Ok(());
-    }
-
-    fn create_table(&self) -> Result<(), Box<dyn error::Error>> {
-        let connection = self.connection.get()?;
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS sessions (
-                    id INTEGER PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    refresh_token INTEGER NOT NULL UNIQUE,
-                    access_token INTEGER NOT NULL UNIQUE,
-                    FOREIGN KEY(user_id) REFERENCES user(id),
-                    FOREIGN KEY(refresh_token) REFERENCES refresh_tokens(id),
-                    FOREIGN KEY(access_token) REFERENCES access_tokens(id)
-            );",
-            [],
-        )?;
-
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_user_id ON sessions(user_id);",
-            [],
-        )?;
         return Ok(());
     }
 }
+
+const CREATE_SESSION_TABLE_STATEMENT: &'static str = "CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    ip_addr TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires DATETIME,
+
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_id ON sessions(user_id);";

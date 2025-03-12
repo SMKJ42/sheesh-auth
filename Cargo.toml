@@ -14,5 +14,3 @@ r2d2 = "0.8.10"
 [dev-dependencies]
 ctrlc = "3.4"
 
-[[example]]
-name = "basic"

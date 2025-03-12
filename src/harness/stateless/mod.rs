@@ -1,8 +1,6 @@
-use core::error;
-
 use crate::{auth_token::AuthToken, session::Session};
 
-use super::{DbHarnessSession, DbHarnessToken};
+use super::{DbHarnessSession, DbHarnessToken, HarnessError};
 
 /// WARNING: Not for production use unless you have a REALLY good reason to not store sessions or tokens.
 ///
@@ -13,23 +11,19 @@ use super::{DbHarnessSession, DbHarnessToken};
 pub struct StatelessSession;
 
 impl DbHarnessSession for StatelessSession {
-    fn delete(&self, _: i64) -> Result<(), Box<dyn error::Error>> {
+    fn delete(&self, _: i64) -> Result<(), HarnessError> {
         return Ok(());
     }
-    fn insert(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
+    fn insert(&self, _: &Session) -> Result<(), HarnessError> {
         return Ok(());
     }
-    fn read_by_id(&self, _: i64) -> Result<Option<Session>, Box<dyn std::error::Error>> {
+    fn read_by_id(&self, _: i64) -> Result<Option<Session>, HarnessError> {
         return Ok(None);
     }
-    fn read_by_user_id(&self, _: i64) -> Result<Option<Session>, Box<dyn error::Error>> {
+    fn read_by_user_id(&self, _: i64) -> Result<Option<Session>, HarnessError> {
         return Ok(None);
     }
-    fn update(&self, _: &Session) -> Result<(), Box<dyn error::Error>> {
-        return Ok(());
-    }
-
-    fn create_table(&self) -> Result<(), Box<dyn error::Error>> {
+    fn create_table(&self) -> Result<(), HarnessError> {
         return Ok(());
     }
 }
@@ -43,33 +37,41 @@ impl DbHarnessSession for StatelessSession {
 pub struct StatelessToken;
 
 impl DbHarnessToken for StatelessToken {
-    fn create_table(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_table(&self) -> Result<(), HarnessError> {
         return Ok(());
     }
-    fn delete_access_token(&self, _: i64) -> Result<(), Box<dyn std::error::Error>> {
-        return Ok(());
-    }
-
-    fn delete_resfresh_token(&self, _: i64) -> Result<(), Box<dyn std::error::Error>> {
+    fn delete_access_token(&self, _: i64) -> Result<(), HarnessError> {
         return Ok(());
     }
 
-    fn insert(&self, _: &crate::auth_token::AuthToken) -> Result<(), Box<dyn std::error::Error>> {
+    fn delete_resfresh_token(&self, _: i64) -> Result<(), HarnessError> {
+        return Ok(());
+    }
+
+    fn delete_access_token_by_session(&self, _: i64) -> Result<(), HarnessError> {
+        return Ok(());
+    }
+
+    fn delete_refresh_token_by_session(&self, _: i64) -> Result<(), HarnessError> {
+        return Ok(());
+    }
+
+    fn insert(&self, _: &crate::auth_token::AuthToken) -> Result<(), HarnessError> {
         return Ok(());
     }
 
     fn read_access_token(
         &self,
         _: i64,
-    ) -> Result<Option<crate::auth_token::AuthToken>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<crate::auth_token::AuthToken>, HarnessError> {
         return Ok(None);
     }
 
-    fn read_refresh_token(&self, _: i64) -> Result<Option<AuthToken>, Box<dyn std::error::Error>> {
+    fn read_refresh_token(&self, _: i64) -> Result<Option<AuthToken>, HarnessError> {
         return Ok(None);
     }
 
-    fn update(&self, _: &AuthToken) -> Result<(), Box<dyn std::error::Error>> {
-        return Ok(());
-    }
+    // fn invalidate(&self, _: &AuthToken) -> Result<(), HarnessError> {
+    //     return Ok(());
+    // }
 }
