@@ -100,11 +100,12 @@ where
         };
     }
 
-    pub fn init_tables(&self) -> Result<(), HarnessError> {
+    /// Function to initailize new tables in a database.
+    pub fn init(self) -> Result<Self, HarnessError> {
         self.token.create_table()?;
         self.session.create_table()?;
         self.user.create_table()?;
 
-        return Ok(());
+        return Ok(self);
     }
 }

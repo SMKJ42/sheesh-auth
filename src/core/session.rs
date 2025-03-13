@@ -5,16 +5,12 @@ use chrono::{DateTime, Utc};
 use crate::harness::{harness_error, DbHarnessSession, DbHarnessToken, HarnessError};
 
 use super::{
-    auth_token::{
-        AccessTokenSecret, AuthTokenManager, AuthTokenManagerConfig, RefreshTokenSecret, TokenType,
-    },
+    auth_token::{AccessToken, AuthTokenManager, AuthTokenManagerConfig, RefreshToken, TokenType},
     get_experation,
     id::{DefaultIdGenerator, IdGenerator, ZerodIdGenerator},
     AuthError, AuthTokenError,
 };
 
-// Session naming convention may be a bit misleading. it is really to handle the refresh token on the auth server iteself...
-// the client server will also have a session entity representing the user's session within the application
 pub struct SessionManagerConfig<T>
 where
     T: IdGenerator,
@@ -98,7 +94,7 @@ where
         &self,
         user_id: i64,
         ip_addr: Option<IpAddr>,
-    ) -> Result<(Session, RefreshTokenSecret, AccessTokenSecret), AuthError> {
+    ) -> Result<(Session, RefreshToken, AccessToken), AuthError> {
         let id = self.id_generator.new_u64();
 
         let session = Session::new(
@@ -110,73 +106,60 @@ where
 
         self.harness.insert(&session)?;
 
-        let refresh_secret = self.token_manager.next_token(user_id, TokenType::Refresh)?;
+        let refresh_secret = self
+            .token_manager
+            .next_token(session.id(), TokenType::Refresh)?;
 
-        let access_secret = self.token_manager.next_token(user_id, TokenType::Access)?;
+        let access_secret = self
+            .token_manager
+            .next_token(session.id(), TokenType::Access)?;
 
         return Ok((session, refresh_secret.into(), access_secret.into()));
     }
 
     pub fn verify_refresh_token(
         &self,
-        user_id: i64,
-        user_token_atmpt: &str,
+        session_id: i64,
+        user_token_atmpt: &RefreshToken,
     ) -> Result<Session, AuthError> {
-        if let Some(session) = self.harness.read_by_user_id(user_id).unwrap() {
+        if let Some(session) = self.harness.read_by_id(session_id).unwrap() {
             self.token_manager
-                .verify_refresh_token(session.id(), user_token_atmpt)?;
+                .verify_refresh_token(session_id, user_token_atmpt.0.secret())?;
             return Ok(session);
         } else {
-            todo!();
+            return Err(AuthError::Token(AuthTokenError::new(
+                super::AuthTokenErrorKind::NotAuthorized,
+            )));
         }
     }
 
     pub fn verify_access_token(
         &self,
-        user_id: i64,
-        user_token_atmpt: &str,
+        session_id: i64,
+        user_token_atmpt: &AccessToken,
     ) -> Result<Session, AuthError> {
-        if let Some(session) = self.harness.read_by_user_id(user_id).unwrap() {
+        if let Some(session) = self.harness.read_by_id(session_id).unwrap() {
             self.token_manager
-                .verify_access_token(session.id(), user_token_atmpt)?;
+                .verify_access_token(session_id, user_token_atmpt.0.secret())?;
             return Ok(session);
         } else {
-            todo!();
+            return Err(AuthError::Token(AuthTokenError::new(
+                super::AuthTokenErrorKind::NotAuthorized,
+            )));
         }
-    }
-
-    // pub fn untrusted_verify_token(
-    //     &self,
-    //     token: AuthToken,
-    //     user_token_atmpt: &str,
-    // ) -> Result<(), AuthTokenError> {
-    //     if let Some(session) = self.harness.read_by_user_id(user_id).unwrap() {
-    //         return self
-    //             .token_manager
-    //             .verify_access_token(session.id(), user_token_atmpt);
-    //     } else {
-    //         todo!();
-    //     }
-    // }
-
-    pub fn get_session_by_user_id(&self, user_id: i64) -> Result<Option<Session>, HarnessError> {
-        return self.harness.read_by_user_id(user_id);
     }
 
     pub fn get_session_by_id(&self, id: i64) -> Result<Option<Session>, HarnessError> {
         return self.harness.read_by_id(id);
     }
 
-    pub fn create_new_access_token(
-        &self,
-        session: &mut Session,
-        user_id: i64,
-    ) -> Result<AccessTokenSecret, AuthError> {
+    pub fn create_new_access_token(&self, session: &Session) -> Result<AccessToken, AuthError> {
         self.token_manager
-            .delete_access_token_by_session(session.id())
-            .unwrap();
+            .delete_access_token_by_session(session.id())?;
 
-        let access_token_secret = self.token_manager.next_token(user_id, TokenType::Access)?;
+        let access_token_secret = self
+            .token_manager
+            .next_token(session.id(), TokenType::Access)?;
 
         return Ok(access_token_secret.into());
     }
@@ -184,9 +167,8 @@ where
     /// Deletes the old access and refresh token and then returns new tokens.
     pub fn create_new_refresh_token(
         &self,
-        session: &mut Session,
-        user_id: i64,
-    ) -> Result<(RefreshTokenSecret, AccessTokenSecret), AuthError> {
+        session: &Session,
+    ) -> Result<(RefreshToken, AccessToken), AuthError> {
         self.token_manager
             .delete_refresh_token_by_session(session.id())?;
 
@@ -195,17 +177,14 @@ where
             .delete_access_token_by_session(session.id())
             .map_err(|err| AuthError::Harness(err))?;
 
-        let access_token_secret: AccessTokenSecret = self
+        let access_token_secret = self
             .token_manager
-            .next_token(user_id, TokenType::Access)?
-            .into();
-
-        let refresh_token_secret: RefreshTokenSecret = self
+            .next_token(session.id(), TokenType::Access)?;
+        let refresh_token_secret = self
             .token_manager
-            .next_token(user_id, TokenType::Refresh)?
-            .into();
+            .next_token(session.id(), TokenType::Refresh)?;
 
-        return Ok((refresh_token_secret, access_token_secret));
+        return Ok((refresh_token_secret.into(), access_token_secret.into()));
     }
 
     /// Deletes the associated tokens inside the database, but leaves the session itself intact.
@@ -219,16 +198,9 @@ where
             .delete_refresh_token_by_session(session_id)
             .map_err(|err| AuthError::Harness(err));
     }
-
-    // pub fn invalidate_access_token(&self, session: &mut Session) -> Result<(), AuthError> {
-    //     return self
-    //         .token_manager
-    //         .delete_access_token_by_session(session.id())
-    //         .map_err(|err| TokenManagerError::Harness(err));
-    // }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Session {
     id: i64,
     user_id: i64,

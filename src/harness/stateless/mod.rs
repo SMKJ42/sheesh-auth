@@ -11,20 +11,20 @@ use super::{DbHarnessSession, DbHarnessToken, HarnessError};
 pub struct StatelessSession;
 
 impl DbHarnessSession for StatelessSession {
-    fn delete(&self, _: i64) -> Result<(), HarnessError> {
+    fn delete(&self, _id: i64) -> Result<(), HarnessError> {
         return Ok(());
     }
-    fn insert(&self, _: &Session) -> Result<(), HarnessError> {
+    fn insert(&self, _session: &Session) -> Result<(), HarnessError> {
         return Ok(());
     }
-    fn read_by_id(&self, _: i64) -> Result<Option<Session>, HarnessError> {
-        return Ok(None);
-    }
-    fn read_by_user_id(&self, _: i64) -> Result<Option<Session>, HarnessError> {
+    fn read_by_id(&self, _id: i64) -> Result<Option<Session>, HarnessError> {
         return Ok(None);
     }
     fn create_table(&self) -> Result<(), HarnessError> {
         return Ok(());
+    }
+    fn read_by_user_id(&self, _user_id: i64) -> Result<Option<Session>, HarnessError> {
+        return Ok(None);
     }
 }
 
@@ -70,8 +70,4 @@ impl DbHarnessToken for StatelessToken {
     fn read_refresh_token(&self, _: i64) -> Result<Option<AuthToken>, HarnessError> {
         return Ok(None);
     }
-
-    // fn invalidate(&self, _: &AuthToken) -> Result<(), HarnessError> {
-    //     return Ok(());
-    // }
 }

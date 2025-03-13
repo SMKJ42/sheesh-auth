@@ -1,19 +1,22 @@
 use std::fmt::Display;
 
-use chrono::offset::LocalResult;
-use chrono::{DateTime, TimeDelta, Utc};
-use scrypt::password_hash::rand_core::RngCore;
+use chrono::{offset::LocalResult, DateTime, TimeDelta, Utc};
 use scrypt::password_hash::{
-    rand_core::OsRng, Encoding, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+    rand_core::{OsRng, RngCore},
+    Encoding, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
 };
 use scrypt::{Params, Scrypt};
 
 use crate::harness::HarnessError;
 
+// mod auth_token as priv_auth_token;
+mod test;
+
+// TODO: re-export with same namespace...
 pub mod auth_token;
+
 pub mod id;
 pub mod session;
-pub mod test;
 pub mod user;
 
 // using pub static mut declaration here is doable, but would require an unsafe block.

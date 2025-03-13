@@ -1,4 +1,4 @@
-use crate::harness::{DbHarnessToken, HarnessError};
+use crate::harness::{harness_error, DbHarnessToken, HarnessError};
 use std::fmt::Debug;
 
 use super::{
@@ -8,6 +8,7 @@ use super::{
     AuthError, AuthTokenError, AuthTokenErrorKind,
 };
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_ACCESS_TTL: i64 = 30;
 const DEFAULT_REFRESH_TTL: i64 = 60;
@@ -18,11 +19,43 @@ pub enum TokenType {
     Access,
 }
 
+/// An type that allows for abstracting tokens from the .next_token() function inside the session handler.
+///
+/// Also provides extensibility for other token types. See [AccessToken](AccessToken) for implementation details.
 pub struct TokenSecret(String);
-pub struct AccessTokenSecret(String);
+
+impl Debug for TokenSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TokenSecret")
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
+pub struct AccessToken(pub(crate) AccessTokenSecret);
+
+#[derive(PartialEq, Serialize, Deserialize)]
+pub(crate) struct AccessTokenSecret(String);
+
+impl From<TokenSecret> for AccessToken {
+    fn from(value: TokenSecret) -> Self {
+        return Self(AccessTokenSecret(value.0));
+    }
+}
+
+impl From<String> for AccessToken {
+    fn from(value: String) -> Self {
+        return Self(AccessTokenSecret(value));
+    }
+}
+
+impl PartialEq<&str> for AccessToken {
+    fn eq(&self, other: &&str) -> bool {
+        return self.0.secret() == *other;
+    }
+}
 
 impl AccessTokenSecret {
-    pub fn secret(&self) -> &str {
+    pub(crate) fn secret(&self) -> &str {
         return &self.0;
     }
 }
@@ -33,10 +66,44 @@ impl From<TokenSecret> for AccessTokenSecret {
     }
 }
 
-pub struct RefreshTokenSecret(String);
+impl PartialEq<&str> for AccessTokenSecret {
+    fn eq(&self, other: &&str) -> bool {
+        return self.secret() == *other;
+    }
+}
+
+impl Debug for AccessTokenSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AccessTokenSecret")
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
+pub struct RefreshToken(pub(crate) RefreshTokenSecret);
+
+impl From<TokenSecret> for RefreshToken {
+    fn from(value: TokenSecret) -> Self {
+        return Self(RefreshTokenSecret(value.0));
+    }
+}
+
+impl From<String> for RefreshToken {
+    fn from(value: String) -> Self {
+        return Self(RefreshTokenSecret(value));
+    }
+}
+
+impl PartialEq<&str> for RefreshToken {
+    fn eq(&self, other: &&str) -> bool {
+        return self.0.secret() == *other;
+    }
+}
+
+#[derive(PartialEq, Serialize, Deserialize)]
+pub(crate) struct RefreshTokenSecret(String);
 
 impl RefreshTokenSecret {
-    pub fn secret(&self) -> &str {
+    pub(crate) fn secret(&self) -> &str {
         return &self.0;
     }
 }
@@ -44,6 +111,18 @@ impl RefreshTokenSecret {
 impl From<TokenSecret> for RefreshTokenSecret {
     fn from(value: TokenSecret) -> Self {
         return Self(value.0);
+    }
+}
+
+impl PartialEq<&str> for RefreshTokenSecret {
+    fn eq(&self, other: &&str) -> bool {
+        return self.secret() == *other;
+    }
+}
+
+impl Debug for RefreshTokenSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RefreshTokenSecret")
     }
 }
 
@@ -156,25 +235,25 @@ where
 {
     pub fn next_token(
         &self,
-        user_id: i64,
+        session_id: i64,
         token_type: TokenType,
     ) -> Result<TokenSecret, AuthError> {
         let id = i64::from_be_bytes(self.id_generator.new_u64().to_be_bytes());
         let token = (self.token_fn)();
-        let auth_token: AuthToken;
+
+        println!("token: {}", token);
 
         let salt = (self.salt_fn)();
         let salted_hash = (self.hash_fn)(&token, &salt)?;
 
-        match token_type {
+        let auth_token = match token_type {
             TokenType::Access => {
-                auth_token = AuthToken::new_access(id, user_id, salted_hash, self.access_ttl)?;
+                AuthToken::new_access(id, session_id, salted_hash, self.access_ttl)?
             }
-
             TokenType::Refresh => {
-                auth_token = AuthToken::new_refresh(id, user_id, salted_hash, self.refresh_ttl)?;
+                AuthToken::new_refresh(id, session_id, salted_hash, self.refresh_ttl)?
             }
-        }
+        };
 
         self.harness.insert(&auth_token)?;
 
@@ -186,7 +265,7 @@ where
         let token_opt = self
             .harness
             .read_refresh_token(session_id)
-            .map_err(|err| AuthError::Harness(err))?;
+            .map_err(harness_error)?;
 
         match token_opt {
             Some(auth_token) => {
@@ -194,7 +273,10 @@ where
                     .verify_token(auth_token, token_str)
                     .map_err(|err| err.into());
             }
-            None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
+            None => {
+                println!("None");
+                return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into());
+            }
         };
     }
 
@@ -211,7 +293,10 @@ where
                     .verify_token(auth_token, token_str)
                     .map_err(|err| err.into());
             }
-            None => return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into()),
+            None => {
+                println!("None");
+                return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized).into());
+            }
         };
     }
 
@@ -220,14 +305,9 @@ where
         auth_token: AuthToken,
         token_str: &str,
     ) -> Result<(), AuthTokenError> {
-        // TODO: I removed the user_id field, so I need to access this before diving into the token validation...
-        //
-        // if user_id != auth_token.user_id {
-        // return Err(AuthTokenError::new(AuthTokenErrorKind::NotAuthorized));
-        // } else
-
+        println!("attmpt: {}", token_str);
         if auth_token.is_expired() {
-            let _ = self.harness.delete_access_token(auth_token.id());
+            // let _ = self.harness.delete_access_token(auth_token.id());
             return Err(AuthTokenError::new(AuthTokenErrorKind::Expired));
         } else {
             return Ok((self.verify_token_fn)(&token_str, &auth_token.salted_hash)?);

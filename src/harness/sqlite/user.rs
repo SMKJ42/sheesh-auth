@@ -125,25 +125,10 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
     }
 
     fn create_table(&self) -> result::Result<(), HarnessError> {
-        // TODO: the FK should not exist if the session is "stateless..."
-        let default_stmt = "CREATE TABLE users (
-    id INTEGER PRIMARY KEY,
-    username TEXT NOT NULL UNIQUE,
-    groups TEXT NOT NULL,
-    role TEXT NOT NULL,
-    failed_attempts INTEGER NOT NULL,
-    salted_hash TEXT NOT NULL,
-    is_banned BOOLEAN NOT NULL CHECK (is_banned IN (0, 1)),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_username ON users(username);";
-
         self.connection
             .get()
             .map_err(harness_error)?
-            .prepare(default_stmt)
+            .prepare(CREATE_USER_TABLE_STATEMENT)
             .map_err(harness_error)?
             .execute([])
             .map_err(harness_error)?;
@@ -178,3 +163,17 @@ CREATE INDEX IF NOT EXISTS idx_username ON users(username);";
         todo!();
     }
 }
+
+const CREATE_USER_TABLE_STATEMENT: &'static str = "CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    groups TEXT NOT NULL,
+    role TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL,
+    salted_hash TEXT NOT NULL,
+    is_banned BOOLEAN NOT NULL CHECK (is_banned IN (0, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_username ON users(username);";

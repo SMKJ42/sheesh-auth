@@ -10,7 +10,12 @@ scrypt = "0.11.0"
 rusqlite = { version = "0.32.1",  features = [ "chrono" ] }
 r2d2_sqlite = "0.25.0"
 r2d2 = "0.8.10"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
 ctrlc = "3.4"
+
+[[example]]
+name = "stateless"
+
 

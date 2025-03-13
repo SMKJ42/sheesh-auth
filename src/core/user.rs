@@ -3,10 +3,10 @@ use std::net::IpAddr;
 use crate::harness::{DbHarnessSession, DbHarnessToken, DbHarnessUser};
 
 use super::{
-    auth_token::{AccessTokenSecret, RefreshTokenSecret},
+    auth_token::{AccessToken, RefreshToken},
     default_hash_fn, default_rng_salt_fn, default_verify_token_fn,
     id::{DefaultIdGenerator, IdGenerator},
-    session::SessionManager,
+    session::{Session, SessionManager},
     AuthError, AuthTokenError,
 };
 
@@ -113,7 +113,7 @@ where
         username: &str,
         pwd: &str,
         ip_addr: Option<IpAddr>,
-    ) -> Result<(UserData, RefreshTokenSecret, AccessTokenSecret), AuthError>
+    ) -> Result<(Session, RefreshToken, AccessToken), AuthError>
     where
         Id: IdGenerator,
         Sh: DbHarnessSession,
@@ -129,64 +129,20 @@ where
 
         self.verify_pwd(&user, pwd)?;
 
-        let (_session, refresh, access) = session_manager.new_session(user.id, ip_addr)?;
-
-        return Ok((user, refresh, access));
+        return session_manager.new_session(user.id, ip_addr);
     }
 
     pub fn logout<Id, Sh, Th>(
         &self,
         session_manager: &SessionManager<Id, Sh, Th>,
         user_id: i64,
-        user_token_atmpt: &str,
+        user_token_atmpt: &RefreshToken,
     ) -> Result<(), AuthError>
     where
         Id: IdGenerator,
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
     {
-        // // if the user has a session...
-        // if let Some(session_id) = user.session_id {
-        //     // fetch the session from the database, if the session exists...
-        //     if let Some(session) = session_manager.get_session_by_id(session_id)? {
-        //         match session.refresh_token() {
-        //             // and the refresh token exists...
-        //             Some(refresh_token_id) => {
-        //                 // ensure that the user has the authority to logout. If they do not, we will early return, and the session will remain valid.
-        //                 session_manager.verify_session_token(
-        //                     refresh_token_id,
-        //                     user.id,
-        //                     user_token_atmpt,
-        //                 )?;
-        //             }
-        //             None => {
-        //                 /*
-        //                  * user is already logged out, but we still want to ensure the access token is invalidated.
-        //                  * This is safe because the state of this branch would be
-        //                  *
-        //                  * Session {
-        //                  *     refresh_token: None
-        //                  *     access_token: Option<token_id>
-        //                  * }
-        //                  *
-        //                  * Invalidating the session if the session does not have a refresh token is intended behavior.
-        //                  */
-        //             }
-        //         }
-        //         session_manager.invalidate_session(session)?;
-
-        //         return Ok(());
-        //     } else {
-        //         return Err(UserManagerError::new(
-        //             UserManagerErrorKind::AlreadyLoggedOut,
-        //         ));
-        //     }
-        // } else {
-        //     return Err(UserManagerError::new(
-        //         UserManagerErrorKind::AlreadyLoggedOut,
-        //     ));
-        // };
-
         let session = session_manager.verify_refresh_token(user_id, user_token_atmpt)?;
         return Ok(session_manager.delete_session(session.id())?);
     }
@@ -429,62 +385,3 @@ impl Groups {
         return string;
     }
 }
-
-pub trait PublicUserData: Clone {}
-
-pub trait PrivateUserData: Clone {}
-
-// #[derive(Debug)]
-// pub enum UserManagerErrorKind {
-//     // Error can be in the harness, or in the token validation. This will occure only after the user and token are verified and the logout fails.
-//     SessionInvalidation(TokenManagerError),
-//     AlreadyLoggedOut,
-//     // Error resides strictly in the Token, not in the harness.
-//     Token(AuthTokenError),
-//     Harness(HarnessError),
-//     UserNotFound,
-// }
-
-// impl From<TokenManagerError> for UserManagerError {
-//     fn from(value: TokenManagerError) -> Self {
-//         match value {
-//             TokenManagerError::AuthToken(err) => Self::new(UserManagerErrorKind::Token(err)),
-//             TokenManagerError::Harness(err) => Self::new(UserManagerErrorKind::Harness(err.into())),
-//         }
-//     }
-// }
-
-// #[derive(Debug)]
-// pub struct UserManagerError {
-//     pub kind: UserManagerErrorKind,
-// }
-
-// impl Display for UserManagerError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         return write!(f, "{}", self);
-//     }
-// }
-
-// impl From<Box<dyn error::Error>> for UserManagerError {
-//     fn from(value: Box<dyn error::Error>) -> Self {
-//         return UserManagerError::new(UserManagerErrorKind::Harness(value));
-//     }
-// }
-
-// impl From<AuthTokenError> for UserManagerError {
-//     fn from(value: AuthTokenError) -> Self {
-//         return UserManagerError::new(UserManagerErrorKind::Token(value));
-//     }
-// }
-
-// impl UserManagerError {
-//     pub fn new(kind: UserManagerErrorKind) -> Self {
-//         return Self { kind };
-//     }
-
-//     pub fn kind(&self) -> &UserManagerErrorKind {
-//         return &self.kind;
-//     }
-// }
-
-// impl error::Error for UserManagerError {}

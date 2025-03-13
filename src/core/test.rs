@@ -27,10 +27,7 @@ mod core_test {
     fn init_stateless_config<'a>(
         pool: &'a Pool<SqliteConnectionManager>,
     ) -> (DefaultUserManager<'a>, StatelessSessionManager) {
-        let harness = DbHarness::new_stateless_sqlite(&pool);
-
-        harness.init_tables().unwrap();
-
+        let harness = DbHarness::new_stateless_sqlite(&pool).init().unwrap();
         let user_manager = UserManagerConfig::default().init(harness.user);
         let session_manager =
             SessionManagerConfig::new_stateless().init(harness.session, harness.token);
@@ -63,12 +60,12 @@ mod core_test {
             .create_user(username.clone(), &pwd, role)
             .expect("Error creating user");
 
-        let (user, refresh_token, access_token) = user_manager
+        let (_session, refresh_token, access_token) = user_manager
             .login(&session_manager, &user.username(), &pwd, None)
             .expect("Error logging in user");
 
-        assert_eq!(refresh_token.secret(), "");
-        assert_eq!(access_token.secret(), "");
+        assert_eq!(refresh_token, "");
+        assert_eq!(access_token, "");
 
         assert_ne!(user.salted_hash(), pwd);
         assert_eq!(user.username(), username);
