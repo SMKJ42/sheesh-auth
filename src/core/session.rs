@@ -6,7 +6,7 @@ use crate::harness::{harness_error, DbHarnessSession, DbHarnessToken, HarnessErr
 
 use super::{
     auth_token::{AccessToken, AuthTokenManager, AuthTokenManagerConfig, RefreshToken, TokenType},
-    get_experation,
+    get_expiration,
     id::{DefaultIdGenerator, IdGenerator, ZerodIdGenerator},
     AuthError, AuthTokenError,
 };
@@ -219,7 +219,7 @@ impl Session {
         ttl: Option<i64>,
     ) -> Result<Self, AuthTokenError> {
         let expires = if let Some(ttl) = ttl {
-            get_experation(ttl)?
+            get_expiration(ttl)?
         } else {
             MAX_UTC
         };

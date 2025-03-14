@@ -58,7 +58,7 @@ pub fn default_rng_token_fn() -> String {
     return ((left << 64) + right).to_string();
 }
 
-pub fn get_experation(ttl: i64) -> Result<DateTime<Utc>, AuthTokenError> {
+pub fn get_expiration(ttl: i64) -> Result<DateTime<Utc>, AuthTokenError> {
     let now = Utc::now();
     let time_delta = TimeDelta::minutes(ttl);
     let (new_time, rem) = now.time().overflowing_add_signed(time_delta);

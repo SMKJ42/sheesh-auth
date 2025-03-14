@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use super::{
     default_hash_fn, default_rng_salt_fn, default_rng_token_fn, default_verify_token_fn,
-    get_experation,
+    get_expiration,
     id::{DefaultIdGenerator, IdGenerator, ZerodIdGenerator},
     AuthError, AuthTokenError, AuthTokenErrorKind,
 };
@@ -355,7 +355,7 @@ impl AuthToken {
         salted_hash: String,
         ttl: i64,
     ) -> Result<Self, AuthTokenError> {
-        let expires = get_experation(ttl)?;
+        let expires = get_expiration(ttl)?;
 
         return Ok(AuthToken {
             id,
@@ -372,7 +372,7 @@ impl AuthToken {
         salted_hash: String,
         ttl: i64,
     ) -> Result<Self, AuthTokenError> {
-        let expires = get_experation(ttl)?;
+        let expires = get_expiration(ttl)?;
 
         return Ok(AuthToken {
             id,

@@ -1,11 +1,7 @@
 use std::env;
 
 use r2d2_sqlite::SqliteConnectionManager;
-use sheesh::{
-    harness::DbHarness,
-    session::SessionManagerConfig,
-    user::{Role, UserManagerConfig},
-};
+use sheesh::{harness::stateless::init_stateless_sqlite_config, user::Role};
 
 /// The Stateless example is usefull for authentication schemes where a
 /// session is based on a long lived connection.
@@ -21,10 +17,7 @@ fn main() {
     let pool = r2d2::Pool::new(conn).unwrap();
 
     // Initialize tables, and the handlers that allow access to the authentication database.
-    let harness = DbHarness::new_stateless_sqlite(&pool).init().unwrap();
-    let user_manager = UserManagerConfig::default().init(harness.user);
-    let session_manager =
-        SessionManagerConfig::new_stateless().init(harness.session, harness.token);
+    let (user_manager, session_manager) = init_stateless_sqlite_config(&pool).unwrap();
 
     // Provide new user params.
     let username = "user_1".to_string();
