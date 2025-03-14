@@ -139,7 +139,7 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
     fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError> {
         let conn = self.connection.get().map_err(harness_error)?;
         conn.execute(
-            "UPDATE users SET 
+            "UPDATE users SET
         salted_hash = :salted_hash,
         WHERE id = :id",
             named_params! {
@@ -156,8 +156,21 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         todo!();
     }
 
-    fn set_attempts(&self, id: i64, count: i32) -> Result<(), HarnessError> {
-        todo!();
+    fn set_attempts(&self, id: i64, count: i64) -> Result<(), HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
+
+        conn.execute(
+            "UPDATE users SET
+        failed_attempts = :failed_attempts,
+        WHERE id = :id",
+            named_params! {
+                ":failed_attempts": count,
+                ":id": id,
+            },
+        )
+        .map_err(harness_error)?;
+
+        return Ok(());
     }
     fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError> {
         todo!();

@@ -1,6 +1,14 @@
-use crate::{auth_token::AuthToken, session::Session};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 
-use super::{DbHarnessSession, DbHarnessToken, HarnessError};
+use crate::{
+    auth_token::AuthToken,
+    id::ZerodIdGenerator,
+    session::{Session, SessionManager, SessionManagerConfig},
+    user::UserManagerConfig,
+};
+
+use super::{sqlite::SqliteUserManager, DbHarness, DbHarnessSession, DbHarnessToken, HarnessError};
 
 /// WARNING: Not for production use unless you have a REALLY good reason to not store sessions or tokens.
 ///
@@ -70,4 +78,18 @@ impl DbHarnessToken for StatelessToken {
     fn read_refresh_token(&self, _: i64) -> Result<Option<AuthToken>, HarnessError> {
         return Ok(None);
     }
+}
+
+pub type StatelessSessionManager =
+    SessionManager<ZerodIdGenerator, StatelessSession, StatelessToken>;
+
+pub fn init_stateless_sqlite_config<'a>(
+    pool: &'a Pool<SqliteConnectionManager>,
+) -> Result<(SqliteUserManager<'a>, StatelessSessionManager), HarnessError> {
+    let harness = DbHarness::new_stateless_sqlite(&pool).init()?;
+    let user_manager = UserManagerConfig::default().init(harness.user);
+    let session_manager =
+        SessionManagerConfig::new_stateless().init(harness.session, harness.token);
+
+    return Ok((user_manager, session_manager));
 }

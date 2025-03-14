@@ -127,7 +127,16 @@ where
             }
         };
 
-        self.verify_pwd(&user, pwd)?;
+        let res = self.verify_pwd(&user, pwd);
+
+        if res.is_err() {
+            self.harness
+                .set_attempts(user.id(), user.failed_attempts + 1)?;
+        } else if user.failed_attempts != 0 {
+            self.harness.set_attempts(user.id(), 0)?;
+        }
+
+        res?;
 
         return session_manager.new_session(user.id, ip_addr);
     }

@@ -5,7 +5,15 @@ pub mod stateless;
 
 use std::{error, fmt::Display};
 
-use crate::{auth_token::AuthToken, session::Session, user::UserData};
+use sqlite::user::SqliteHarnessUser;
+use stateless::{StatelessSession, StatelessToken};
+
+use crate::{
+    auth_token::AuthToken,
+    id::IdGenerator,
+    session::Session,
+    user::{UserData, UserManager},
+};
 
 pub enum Db {
     MySql,
@@ -53,7 +61,7 @@ pub trait DbHarnessUser {
     fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError>;
     fn update_username(&self, id: i64, username: String) -> Result<(), HarnessError>;
     fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError>;
-    fn set_attempts(&self, id: i64, count: i32) -> Result<(), HarnessError>;
+    fn set_attempts(&self, id: i64, count: i64) -> Result<(), HarnessError>;
 }
 
 pub trait DbHarnessSession {
@@ -107,5 +115,18 @@ where
         self.user.create_table()?;
 
         return Ok(self);
+    }
+}
+
+impl<'a, T> DbHarness<T, StatelessSession, StatelessToken>
+where
+    T: DbHarnessUser,
+{
+    pub fn new_stateless(user_manager: T) -> Self {
+        return DbHarness {
+            user: user_manager,
+            session: StatelessSession,
+            token: StatelessToken,
+        };
     }
 }

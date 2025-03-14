@@ -4,20 +4,10 @@ mod core_test {
     use r2d2_sqlite::SqliteConnectionManager;
 
     use crate::{
-        harness::{
-            sqlite::{
-                session::SqliteHarnessSession, token::SqliteHarnessToken, user::SqliteHarnessUser,
-            },
-            DbHarness,
-        },
-        id::DefaultIdGenerator,
-        session::{Session, SessionManager, SessionManagerConfig},
-        user::{Role, UserManager, UserManagerConfig},
+        harness::sqlite::{init_sqlite_config, SqliteSessionManager},
+        session::Session,
+        user::Role,
     };
-
-    type SqliteUserManager<'a> = UserManager<DefaultIdGenerator, SqliteHarnessUser<'a>>;
-    type SqliteSessionManager<'a> =
-        SessionManager<DefaultIdGenerator, SqliteHarnessSession<'a>, SqliteHarnessToken<'a>>;
 
     fn init_pool() -> Pool<SqliteConnectionManager> {
         let conn_manager = SqliteConnectionManager::file("test_db/sqlite3.db").with_init(|conn| {
@@ -25,15 +15,6 @@ mod core_test {
             Ok(())
         });
         return r2d2::Pool::new(conn_manager).unwrap();
-    }
-
-    fn init_sqlite_config<'a>(
-        pool: &'a Pool<SqliteConnectionManager>,
-    ) -> (SqliteUserManager<'a>, SqliteSessionManager<'a>) {
-        let harness = DbHarness::new_sqlite(&pool).init().unwrap();
-        let user_manager = UserManagerConfig::default().init(harness.user);
-        let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
-        return (user_manager, session_manager);
     }
 
     fn obtain_session(session_manager: &SqliteSessionManager, session_id: i64) -> Session {
@@ -49,7 +30,7 @@ mod core_test {
          * Project Init.
          */
         let pool = init_pool();
-        let (user_manager, session_manager) = init_sqlite_config(&pool);
+        let (user_manager, session_manager) = init_sqlite_config(&pool).unwrap();
 
         let username = "user_1".to_string();
         let pwd = "user_1_pwd".to_string();

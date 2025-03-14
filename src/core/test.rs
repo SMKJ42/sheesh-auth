@@ -5,34 +5,12 @@ mod core_test {
 
     use crate::{
         default_hash_fn, default_rng_salt_fn, default_verify_token_fn,
-        harness::{
-            sqlite::user::SqliteHarnessUser,
-            stateless::{StatelessSession, StatelessToken},
-            DbHarness,
-        },
-        id::{DefaultIdGenerator, ZerodIdGenerator},
-        session::{SessionManager, SessionManagerConfig},
-        user::{Role, UserManager, UserManagerConfig},
+        harness::stateless::init_stateless_sqlite_config, user::Role,
     };
-
-    type DefaultUserManager<'a> = UserManager<DefaultIdGenerator, SqliteHarnessUser<'a>>;
-    type StatelessSessionManager =
-        SessionManager<ZerodIdGenerator, StatelessSession, StatelessToken>;
 
     fn init_pool() -> Pool<SqliteConnectionManager> {
         let conn_manager = SqliteConnectionManager::file("test_db/core.db");
         return r2d2::Pool::new(conn_manager).unwrap();
-    }
-
-    fn init_stateless_config<'a>(
-        pool: &'a Pool<SqliteConnectionManager>,
-    ) -> (DefaultUserManager<'a>, StatelessSessionManager) {
-        let harness = DbHarness::new_stateless_sqlite(&pool).init().unwrap();
-        let user_manager = UserManagerConfig::default().init(harness.user);
-        let session_manager =
-            SessionManagerConfig::new_stateless().init(harness.session, harness.token);
-
-        return (user_manager, session_manager);
     }
 
     #[test]
@@ -50,7 +28,7 @@ mod core_test {
     #[test]
     fn user_login() {
         let pool = init_pool();
-        let (user_manager, session_manager) = init_stateless_config(&pool);
+        let (user_manager, session_manager) = init_stateless_sqlite_config(&pool).unwrap();
 
         let username = "user_1".to_string();
         let pwd = "user_1_pwd".to_string();

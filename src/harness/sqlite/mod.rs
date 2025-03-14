@@ -5,6 +5,12 @@ mod test;
 pub mod token;
 pub mod user;
 
+use crate::{
+    id::{DefaultIdGenerator, ZerodIdGenerator},
+    session::{SessionManager, SessionManagerConfig},
+    user::{UserManager, UserManagerConfig},
+};
+
 use self::{session::SqliteHarnessSession, token::SqliteHarnessToken, user::SqliteHarnessUser};
 
 use rusqlite::ToSql;
@@ -55,4 +61,17 @@ pub fn map_sql_result<T>(res: Result<T, rusqlite::Error>) -> Result<Option<T>, H
             _ => Err(HarnessError(Box::new(err))),
         },
     };
+}
+
+pub type SqliteUserManager<'a> = UserManager<DefaultIdGenerator, SqliteHarnessUser<'a>>;
+pub type SqliteSessionManager<'a> =
+    SessionManager<DefaultIdGenerator, SqliteHarnessSession<'a>, SqliteHarnessToken<'a>>;
+
+pub fn init_sqlite_config<'a>(
+    pool: &'a Pool<SqliteConnectionManager>,
+) -> Result<(SqliteUserManager<'a>, SqliteSessionManager<'a>), HarnessError> {
+    let harness = DbHarness::new_sqlite(&pool).init()?;
+    let user_manager = UserManagerConfig::default().init(harness.user);
+    let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
+    return Ok((user_manager, session_manager));
 }
