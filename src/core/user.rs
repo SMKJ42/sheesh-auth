@@ -1,6 +1,8 @@
 use std::net::IpAddr;
 
-use crate::harness::{DbHarnessSession, DbHarnessToken, DbHarnessUser};
+use crate::harness::{
+    DbHarnessSession, DbHarnessToken, DbHarnessUser, DbHarnessUserExt, HarnessError,
+};
 
 use super::{
     auth_token::{AccessToken, RefreshToken},
@@ -119,24 +121,13 @@ where
         Sh: DbHarnessSession,
         Th: DbHarnessToken,
     {
-        let user = match self.get_user_by_username(username)? {
-            None => return Err(AuthError::UserNotFound),
-            Some(q_user) => {
-                // assign user, continue to verify password
-                q_user
-            }
+        let user = if let Some(q_user) = self.get_user_by_username(username)? {
+            q_user
+        } else {
+            return Err(AuthError::UserNotFound);
         };
 
-        let res = self.verify_pwd(&user, pwd);
-
-        if res.is_err() {
-            self.harness
-                .set_attempts(user.id(), user.failed_attempts + 1)?;
-        } else if user.failed_attempts != 0 {
-            self.harness.set_attempts(user.id(), 0)?;
-        }
-
-        res?;
+        self.verify_pwd(&user, pwd)?;
 
         return session_manager.new_session(user.id, ip_addr);
     }
@@ -172,7 +163,7 @@ where
 
         return Ok(self
             .harness
-            .update_salted_hash(user.id(), user.salted_hash)?);
+            .update_salted_hash(user.id(), &user.salted_hash)?);
     }
 
     pub fn get_user_by_id(&self, id: &i64) -> Result<Option<UserData>, AuthError> {
@@ -185,6 +176,52 @@ where
 
     pub fn delete_user(&self, id: i64) -> Result<(), AuthError> {
         return Ok(self.harness.delete(id)?);
+    }
+}
+
+impl<T, V> UserManager<T, V>
+where
+    T: IdGenerator,
+    V: DbHarnessUserExt,
+{
+    /// Login
+    pub fn login_log_on_fail<Id, Sh, Th>(
+        &self,
+        session_manager: &SessionManager<Id, Sh, Th>,
+        username: &str,
+        pwd: &str,
+        ip_addr: Option<IpAddr>,
+    ) -> Result<(Session, RefreshToken, AccessToken), AuthError>
+    where
+        Id: IdGenerator,
+        Sh: DbHarnessSession,
+        Th: DbHarnessToken,
+    {
+        let user = if let Some(q_user) = self.get_user_by_username(username)? {
+            q_user
+        } else {
+            return Err(AuthError::UserNotFound);
+        };
+
+        let res = self.verify_pwd(&user, pwd);
+
+        if res.is_err() {
+            self.harness
+                .set_attempts(user.id(), user.failed_attempts + 1)?;
+        } else if user.failed_attempts != 0 {
+            self.harness.set_attempts(user.id(), 0)?;
+        }
+        res?;
+
+        return session_manager.new_session(user.id, ip_addr);
+    }
+
+    pub fn set_user_ban(&self, user_id: i64, ban: bool) -> Result<(), HarnessError> {
+        return self.harness.set_ban(user_id, ban);
+    }
+
+    pub fn update_username(&self, user_id: i64, username: &str) -> Result<(), HarnessError> {
+        return self.harness.update_username(user_id, username);
     }
 }
 

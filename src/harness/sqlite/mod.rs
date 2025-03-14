@@ -6,7 +6,7 @@ pub mod token;
 pub mod user;
 
 use crate::{
-    id::{DefaultIdGenerator, ZerodIdGenerator},
+    id::DefaultIdGenerator,
     session::{SessionManager, SessionManagerConfig},
     user::{UserManager, UserManagerConfig},
 };

@@ -5,7 +5,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::named_params;
 
 use crate::{
-    harness::{harness_error, DbHarnessUser, HarnessError},
+    harness::{harness_error, DbHarnessUser, DbHarnessUserExt, HarnessError},
     user::UserData,
 };
 
@@ -136,7 +136,7 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         return Ok(());
     }
 
-    fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError> {
+    fn update_salted_hash(&self, id: i64, salted_hash: &str) -> Result<(), HarnessError> {
         let conn = self.connection.get().map_err(harness_error)?;
         conn.execute(
             "UPDATE users SET
@@ -151,11 +151,9 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
 
         return Ok(());
     }
+}
 
-    fn update_username(&self, id: i64, username: String) -> Result<(), HarnessError> {
-        todo!();
-    }
-
+impl<'a> DbHarnessUserExt for SqliteHarnessUser<'a> {
     fn set_attempts(&self, id: i64, count: i64) -> Result<(), HarnessError> {
         let conn = self.connection.get().map_err(harness_error)?;
 
@@ -172,8 +170,39 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
 
         return Ok(());
     }
+
+    fn update_username(&self, id: i64, username: &str) -> Result<(), HarnessError> {
+        let conn = self.connection.get().map_err(harness_error)?;
+
+        conn.execute(
+            "UPDATE users SET
+        username = :username,
+        WHERE id = :id",
+            named_params! {
+                ":username": username,
+                ":id": id,
+            },
+        )
+        .map_err(harness_error)?;
+
+        return Ok(());
+    }
+
     fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError> {
-        todo!();
+        let conn = self.connection.get().map_err(harness_error)?;
+
+        conn.execute(
+            "UPDATE users SET
+        is_banned = :is_banned,
+        WHERE id = :id",
+            named_params! {
+                ":is_banned": ban,
+                ":id": id,
+            },
+        )
+        .map_err(harness_error)?;
+
+        return Ok(());
     }
 }
 

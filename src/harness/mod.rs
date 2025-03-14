@@ -5,15 +5,9 @@ pub mod stateless;
 
 use std::{error, fmt::Display};
 
-use sqlite::user::SqliteHarnessUser;
 use stateless::{StatelessSession, StatelessToken};
 
-use crate::{
-    auth_token::AuthToken,
-    id::IdGenerator,
-    session::Session,
-    user::{UserData, UserManager},
-};
+use crate::{auth_token::AuthToken, session::Session, user::UserData};
 
 pub enum Db {
     MySql,
@@ -58,8 +52,11 @@ pub trait DbHarnessUser {
     fn delete(&self, id: i64) -> Result<(), HarnessError>;
 
     // A function to update the salted_hash, calling .update() will not update this field.
-    fn update_salted_hash(&self, id: i64, salted_hash: String) -> Result<(), HarnessError>;
-    fn update_username(&self, id: i64, username: String) -> Result<(), HarnessError>;
+    fn update_salted_hash(&self, id: i64, salted_hash: &str) -> Result<(), HarnessError>;
+}
+
+pub trait DbHarnessUserExt: DbHarnessUser {
+    fn update_username(&self, id: i64, username: &str) -> Result<(), HarnessError>;
     fn set_ban(&self, id: i64, ban: bool) -> Result<(), HarnessError>;
     fn set_attempts(&self, id: i64, count: i64) -> Result<(), HarnessError>;
 }
