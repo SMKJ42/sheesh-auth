@@ -83,7 +83,10 @@ impl DbHarnessToken for StatelessToken {
 pub type StatelessSessionManager =
     SessionManager<ZerodIdGenerator, StatelessSession, StatelessToken>;
 
-pub fn init_stateless_sqlite_config(
+/// Call this function to obtain a user and session manager. This function also creates the 'users' table.
+/// # Errors:
+/// On failure to create the sqlite tables.
+pub fn init_tables_stateless_sqlite_config(
     pool: Pool<SqliteConnectionManager>,
 ) -> Result<(SqliteUserManager, StatelessSessionManager), HarnessError> {
     let harness = DbHarness::new_stateless_sqlite(pool).init()?;
@@ -92,4 +95,16 @@ pub fn init_stateless_sqlite_config(
         SessionManagerConfig::new_stateless().init(harness.session, harness.token);
 
     return Ok((user_manager, session_manager));
+}
+
+/// Call this function to obtain a user and session manager. It has no side effects.
+pub fn init_stateless_sqlite_config(
+    pool: Pool<SqliteConnectionManager>,
+) -> (SqliteUserManager, StatelessSessionManager) {
+    let harness = DbHarness::new_stateless_sqlite(pool);
+    let user_manager = UserManagerConfig::default().init(harness.user);
+    let session_manager =
+        SessionManagerConfig::new_stateless().init(harness.session, harness.token);
+
+    return (user_manager, session_manager);
 }

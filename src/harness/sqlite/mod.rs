@@ -67,10 +67,23 @@ pub type SqliteUserManager = UserManager<DefaultIdGenerator, SqliteHarnessUser>;
 pub type SqliteSessionManager =
     SessionManager<DefaultIdGenerator, SqliteHarnessSession, SqliteHarnessToken>;
 
-pub fn init_sqlite_config(
+/// Call this function to obtain a user and session manager. This function also creates the 'users', 'sessions', 'auth_tokens' and 'refres_tokens' tables
+/// # Errors:
+/// On failure to create the sqlite tables.
+pub fn init_tables_sqlite_config(
     pool: Pool<SqliteConnectionManager>,
 ) -> Result<(SqliteUserManager, SqliteSessionManager), HarnessError> {
     let harness = DbHarness::new_sqlite(pool).init()?;
+    let user_manager = UserManagerConfig::default().init(harness.user);
+    let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
+    return Ok((user_manager, session_manager));
+}
+
+/// Call this function to obtain a user and session manager. It has no side effects.
+pub fn init_sqlite_config(
+    pool: Pool<SqliteConnectionManager>,
+) -> Result<(SqliteUserManager, SqliteSessionManager), HarnessError> {
+    let harness = DbHarness::new_sqlite(pool);
     let user_manager = UserManagerConfig::default().init(harness.user);
     let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
     return Ok((user_manager, session_manager));
