@@ -83,10 +83,10 @@ impl DbHarnessToken for StatelessToken {
 pub type StatelessSessionManager =
     SessionManager<ZerodIdGenerator, StatelessSession, StatelessToken>;
 
-pub fn init_stateless_sqlite_config<'a>(
-    pool: &'a Pool<SqliteConnectionManager>,
-) -> Result<(SqliteUserManager<'a>, StatelessSessionManager), HarnessError> {
-    let harness = DbHarness::new_stateless_sqlite(&pool).init()?;
+pub fn init_stateless_sqlite_config(
+    pool: Pool<SqliteConnectionManager>,
+) -> Result<(SqliteUserManager, StatelessSessionManager), HarnessError> {
+    let harness = DbHarness::new_stateless_sqlite(pool).init()?;
     let user_manager = UserManagerConfig::default().init(harness.user);
     let session_manager =
         SessionManagerConfig::new_stateless().init(harness.session, harness.token);

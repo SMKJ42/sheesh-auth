@@ -9,17 +9,17 @@ use crate::{
 
 use super::map_sql_result;
 
-pub struct SqliteHarnessToken<'a> {
-    connection: &'a Pool<SqliteConnectionManager>,
+pub struct SqliteHarnessToken {
+    connection: Pool<SqliteConnectionManager>,
 }
 
-impl<'a> SqliteHarnessToken<'a> {
-    pub fn new(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+impl SqliteHarnessToken {
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { connection: pool }
     }
 }
 
-impl<'a> DbHarnessToken for SqliteHarnessToken<'a> {
+impl DbHarnessToken for SqliteHarnessToken {
     fn delete_access_token(&self, id: i64) -> Result<(), HarnessError> {
         self.connection
             .get()
@@ -80,7 +80,7 @@ impl<'a> DbHarnessToken for SqliteHarnessToken<'a> {
                 .map_err(harness_error)?,
             TokenType::Access => connection
                 .execute(
-                    "INSERT INTO access_tokens (id, session_id, salted_hash, expires, valid) 
+                    "INSERT INTO access_tokens (id, session_id, salted_hash, expires, valid)
                     VALUES (:id, :session_id, :salted_hash, :expires, :valid)",
                     named_params! {
                         ":id": auth_token.id(),

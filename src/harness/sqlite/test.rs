@@ -30,7 +30,7 @@ mod core_test {
          * Project Init.
          */
         let pool = init_pool();
-        let (user_manager, session_manager) = init_sqlite_config(&pool).unwrap();
+        let (user_manager, session_manager) = init_sqlite_config(pool).unwrap();
 
         let username = "user_1".to_string();
         let pwd = "user_1_pwd".to_string();

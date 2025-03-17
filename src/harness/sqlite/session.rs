@@ -9,17 +9,17 @@ use crate::{
 
 use super::map_sql_result;
 
-pub struct SqliteHarnessSession<'a> {
-    connection: &'a Pool<SqliteConnectionManager>,
+pub struct SqliteHarnessSession {
+    connection: Pool<SqliteConnectionManager>,
 }
 
-impl<'a> SqliteHarnessSession<'a> {
-    pub fn new(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+impl<'a> SqliteHarnessSession {
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { connection: pool }
     }
 }
 
-impl<'a> DbHarnessSession for SqliteHarnessSession<'a> {
+impl<'a> DbHarnessSession for SqliteHarnessSession {
     fn delete(&self, id: i64) -> Result<(), HarnessError> {
         self.connection
             .get()
@@ -39,7 +39,7 @@ impl<'a> DbHarnessSession for SqliteHarnessSession<'a> {
             .get()
             .map_err(harness_error)?
             .execute(
-                "INSERT INTO sessions (id, user_id, ip_addr, created_at, expires) 
+                "INSERT INTO sessions (id, user_id, ip_addr, created_at, expires)
             VALUES (:id, :user_id, :ip_addr, :created_at, :expires)",
                 named_params![
                     ":id": session.id(),

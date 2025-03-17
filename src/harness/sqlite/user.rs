@@ -11,17 +11,17 @@ use crate::{
 
 use super::map_sql_result;
 
-pub struct SqliteHarnessUser<'a> {
-    connection: &'a Pool<SqliteConnectionManager>,
+pub struct SqliteHarnessUser {
+    connection: Pool<SqliteConnectionManager>,
 }
 
-impl<'a> SqliteHarnessUser<'a> {
-    pub fn new(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+impl SqliteHarnessUser {
+    pub fn new(pool: Pool<SqliteConnectionManager>) -> Self {
         Self { connection: pool }
     }
 }
 
-impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
+impl<'a> DbHarnessUser for SqliteHarnessUser {
     fn delete(&self, id: i64) -> Result<(), HarnessError> {
         self.connection
             .get()
@@ -108,7 +108,7 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
         let conn = self.connection.get().map_err(harness_error)?;
         let res = conn
             .execute(
-                "UPDATE users SET 
+                "UPDATE users SET
         groups = :groups,
         role = :role
         WHERE id = :id",
@@ -153,7 +153,7 @@ impl<'a> DbHarnessUser for SqliteHarnessUser<'a> {
     }
 }
 
-impl<'a> DbHarnessUserExt for SqliteHarnessUser<'a> {
+impl<'a> DbHarnessUserExt for SqliteHarnessUser {
     fn set_attempts(&self, id: i64, count: i64) -> Result<(), HarnessError> {
         let conn = self.connection.get().map_err(harness_error)?;
 

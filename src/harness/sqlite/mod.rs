@@ -24,12 +24,12 @@ use super::{
 };
 
 /// A default table schema for users, sessions and tokens.
-impl<'a> DbHarness<SqliteHarnessUser<'a>, SqliteHarnessSession<'a>, SqliteHarnessToken<'a>> {
-    pub fn new_sqlite(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+impl DbHarness<SqliteHarnessUser, SqliteHarnessSession, SqliteHarnessToken> {
+    pub fn new_sqlite(pool: Pool<SqliteConnectionManager>) -> Self {
         return DbHarness {
-            user: SqliteHarnessUser::new(&pool),
-            session: SqliteHarnessSession::new(&pool),
-            token: SqliteHarnessToken::new(&pool),
+            user: SqliteHarnessUser::new(pool.clone()),
+            session: SqliteHarnessSession::new(pool.clone()),
+            token: SqliteHarnessToken::new(pool),
         };
     }
 }
@@ -39,10 +39,10 @@ impl<'a> DbHarness<SqliteHarnessUser<'a>, SqliteHarnessSession<'a>, SqliteHarnes
 /// This module is particularly useful when you do not want to store a session, or tokens.
 ///
 /// This module relies on a user to authenticate for each connection request through the [login](crate::core::user::UserManager::login) method.
-impl<'a> DbHarness<SqliteHarnessUser<'a>, StatelessSession, StatelessToken> {
-    pub fn new_stateless_sqlite(pool: &'a Pool<SqliteConnectionManager>) -> Self {
+impl DbHarness<SqliteHarnessUser, StatelessSession, StatelessToken> {
+    pub fn new_stateless_sqlite(pool: Pool<SqliteConnectionManager>) -> Self {
         return DbHarness {
-            user: SqliteHarnessUser::new(&pool),
+            user: SqliteHarnessUser::new(pool),
             session: StatelessSession,
             token: StatelessToken,
         };
@@ -63,14 +63,14 @@ pub fn map_sql_result<T>(res: Result<T, rusqlite::Error>) -> Result<Option<T>, H
     };
 }
 
-pub type SqliteUserManager<'a> = UserManager<DefaultIdGenerator, SqliteHarnessUser<'a>>;
-pub type SqliteSessionManager<'a> =
-    SessionManager<DefaultIdGenerator, SqliteHarnessSession<'a>, SqliteHarnessToken<'a>>;
+pub type SqliteUserManager = UserManager<DefaultIdGenerator, SqliteHarnessUser>;
+pub type SqliteSessionManager =
+    SessionManager<DefaultIdGenerator, SqliteHarnessSession, SqliteHarnessToken>;
 
-pub fn init_sqlite_config<'a>(
-    pool: &'a Pool<SqliteConnectionManager>,
-) -> Result<(SqliteUserManager<'a>, SqliteSessionManager<'a>), HarnessError> {
-    let harness = DbHarness::new_sqlite(&pool).init()?;
+pub fn init_sqlite_config(
+    pool: Pool<SqliteConnectionManager>,
+) -> Result<(SqliteUserManager, SqliteSessionManager), HarnessError> {
+    let harness = DbHarness::new_sqlite(pool).init()?;
     let user_manager = UserManagerConfig::default().init(harness.user);
     let session_manager = SessionManagerConfig::default().init(harness.session, harness.token);
     return Ok((user_manager, session_manager));
