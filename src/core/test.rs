@@ -28,7 +28,7 @@ mod core_test {
     #[test]
     fn user_login() {
         let pool = init_pool();
-        let (user_manager, session_manager) = init_stateless_sqlite_config(&pool).unwrap();
+        let (user_manager, session_manager) = init_stateless_sqlite_config(pool).unwrap();
 
         let username = "user_1".to_string();
         let pwd = "user_1_pwd".to_string();
