@@ -17,7 +17,7 @@ fn main() {
     let pool = r2d2::Pool::new(conn).unwrap();
 
     // Initialize tables, and the handlers that allow access to the authentication database.
-    let (user_manager, session_manager) = init_stateless_sqlite_config(pool).unwrap();
+    let (user_manager, session_manager) = init_stateless_sqlite_config(pool);
 
     // Provide new user params.
     let username = "user_1".to_string();
